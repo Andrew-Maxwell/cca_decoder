@@ -27,6 +27,29 @@ outDir = None
 # once we find out which Items refer to them
 images = {}
 
+class Buffer( bytes ):
+
+    def __new__( cls, buf ):
+        return super().__new__( cls, buf )
+
+    def __init__( self, buf, baseOffset=0 ):
+        self.baseOffset = baseOffset
+    
+    def __getitem__( self, index ):
+        ret = super().__getitem__( index )
+        if isinstance( index, slice ):
+            ret = Buffer( ret )
+            ret.baseOffset = self.baseOffset            
+            if index.start is not None:
+                ret.baseOffset += index.start
+        return ret
+
+    def __repr__( self ):
+        return f"@0x{self.baseOffset:x}:  {super().__repr__()}"
+
+    def __format__( self, format_spec ):
+        return f"@0x{self.baseOffset:x}:  {super().__format__( format_spec )}"
+
 def safeName( string ):
     string = string.replace( ' ', '-' )
     string = "".join( [ c for c in string if c.isalnum() or c in [ '-', '_' ] ] )
@@ -44,9 +67,9 @@ def findOffsets( contents, pattern, start=0, end=None ):
 
 class MmfObject:
     
-    def __init__( self, buf, offset ):
+    def __init__( self, buf ):
         self.buf = buf
-        self.offset = offset
+        self.offset = 0
 
     def seek( self, offset ):
         assert offset >= 0
@@ -115,8 +138,8 @@ class MmfObject:
         node[ '__meta__' ] = meta
 
 class AgmiHeader( MmfObject ):
-    def __init__( self, buf, offset ):
-        super().__init__( buf, offset )
+    def __init__( self, buf ):
+        super().__init__( buf )
         self.agmiTag = self.read( 4 )
         assert self.agmiTag == b'AGMI'
         self.unknown1 = self.getU( 4 );
@@ -138,8 +161,8 @@ FLAG_16BPP = 0x0206
 FLAG_8_BIT_INDEX = 0x0103
 
 class MmfImage( MmfObject ):
-    def __init__( self, buf, offset, header, agmiID ):
-        super().__init__( buf, offset )
+    def __init__( self, buf, header, agmiID ):
+        super().__init__( buf )
         self.id = self.getU( 4 )
         self.unknown = self.getU( 2 )
         self.alwaysOne = self.getU( 4 )
@@ -152,11 +175,14 @@ class MmfImage( MmfObject ):
         self.hotspotY = self.getS( 2 )
         self.actionSpotX = self.getS( 2 )
         self.actionSpotY = self.getS( 2 )
-        self.result = Image.new( "RGB", ( self.width, self.height ), color=(0, 0, 0, 0) )
+        self.result = Image.new( "RGBA", ( self.width, self.height ), color=(0, 0, 0, 0) )
         self.x = 0
         self.y = 0
         self.readImage()
         self.name = f'AGMI{agmiID}_0x{self.id:x}'
+        # Now that we know how long the image is, truncate the buffer to only
+        # include the binary data for this image.
+        self.buf = self.buf[ :self.tell() ]
 
     def getPixel( self ):
         if self.flags == FLAG_24BPP:
@@ -221,8 +247,8 @@ class MmfImage( MmfObject ):
 class Item( MmfObject ):
     ignored = False
 
-    def __init__( self, buf, offset ):
-        super().__init__( buf, offset )
+    def __init__( self, buf ):
+        super().__init__( buf )
         self.go( b'ItNa' )
         self.skip( 24 )
         self.name = self.bite( END4 ).decode( 'cp1252', errors='replace' )
@@ -236,8 +262,8 @@ class BackdropItem( Item ):
     header = b'LBackdropItem'
     idKey = b'SBOs'
 
-    def __init__( self, buf, offset ):
-        super().__init__( buf, offset )
+    def __init__( self, buf ):
+        super().__init__( buf )
 
         # Get the image ID
         self.seek( 0 )
@@ -259,8 +285,8 @@ class ActiveItem( Item ):
     header = b'LActiveItem'
     idKey = b'LFFs'
 
-    def __init__( self, buf, offset ):
-        super().__init__( buf, offset )
+    def __init__( self, buf ):
+        super().__init__( buf )
         self.animations = self.loadAnimations()
 
     def loadAnimations( self ):
@@ -346,8 +372,8 @@ class ActiveItem( Item ):
     
 class Instance( MmfObject ):
 
-    def __init__( self, buf, offset ):
-        super().__init__( buf, offset )
+    def __init__( self, buf ):
+        super().__init__( buf )
         assert self.read( 4 ) == b'Inst'
         self.x = self.getU( 4 )
         self.y = self.getU( 4 )
@@ -398,8 +424,8 @@ class Instance( MmfObject ):
 class MmfLevel( MmfObject ):
     header = b'Fram\00{8}v1.5.{8}LFrame'
     
-    def __init__( self, buf, offset ):
-        super().__init__( buf, offset )
+    def __init__( self, buf ):
+        super().__init__( buf )
         self.go( self.header )
         self.go( b'Tit' )
         self.skip( 24 )
@@ -420,10 +446,10 @@ class MmfLevel( MmfObject ):
         while ( itemBuf := self.bite( itemHeaderRegex ) ):
             headerType = re.match( itemHeaderRegex, itemBuf ).group( 1 )
             if headerType == BackdropItem.header:
-                item = BackdropItem( itemBuf, 0 )
+                item = BackdropItem( itemBuf )
                 items[ item.id ] = item                
             elif headerType == ActiveItem.header:
-                item = ActiveItem( itemBuf, 0 )
+                item = ActiveItem( itemBuf )
                 items[ item.id ] = item                
             else:
                 print( f"***WARNING:*** Skipping item of type {headerType}" )
@@ -439,7 +465,7 @@ class MmfLevel( MmfObject ):
         for _ in range( instanceCount ):
             # Instance list can also contain e.g. IPIn ?            
             if self.buf[ self.offset : self.offset + 4 ] == b'Inst':
-                instance = Instance( self.buf[ self.offset : self.offset + 32 ], 0 )
+                instance = Instance( self.buf[ self.offset : self.offset + 32 ] )
                 trace( f"    Found instance {instance.id}" )
                 instances.append( instance )
                 self.skip( 32 )
@@ -462,8 +488,8 @@ class MmfLevel( MmfObject ):
 
 class MmfApplication( MmfObject ):
     
-    def __init__( self, buf, offset ):
-        super().__init__( buf, offset )
+    def __init__( self, buf ):
+        super().__init__( buf )
         self.go( b'LApplication' )
         self.go( b'Abou' )
         self.skip( 24 )
@@ -478,7 +504,7 @@ class MmfApplication( MmfObject ):
         # Go to start of first MmfLevel.header
         self.seek( self.search( MmfLevel.header ) )
         while ( levelBuf := self.bite( MmfLevel.header ) ):
-            levels.append( MmfLevel( levelBuf, 0 ) )
+            levels.append( MmfLevel( levelBuf ) )
         return levels
 
     def write( self ):
@@ -516,7 +542,7 @@ if __name__ == '__main__':
     
     cca = open( args.inFile, 'rb' )
     
-    buf = cca.read()
+    buf = Buffer( cca.read() )
     AGMIOffsets = findOffsets( buf, b'AGMI' )
     print( f"Found AGMIs: { [ f"{AGMI:x}" for AGMI in AGMIOffsets ] }" )
 
@@ -524,20 +550,25 @@ if __name__ == '__main__':
     
     for agmiID, agmiOffset in enumerate( AGMIOffsets ):
         AGMIs.append( {} ) # Keyed by ID
-        header = AgmiHeader( buf, agmiOffset )
-        offset = header.tell()
+        agmiBuf = buf[ agmiOffset: ]
+        header = AgmiHeader( agmiBuf )
+        agmiBuf = agmiBuf[ header.tell(): ]
         for imageCnt in range( header.spriteCount ):
-            image = MmfImage( buf, offset, header, agmiID )
-            print( f'image: {image.width}x{image.height} {image.name} found at {offset:x}' )
+            # Note: We don't know how long an image is until we parse it.
+            # So just slice off each image from the start of the buffer as we find them.
+            image = MmfImage( agmiBuf, header, agmiID )
+            print( f'  found image: {image.width}x{image.height} {image.name} at 0x{agmiBuf.baseOffset:x}' )
             AGMIs[ agmiID ][ image.id ] = image
-            offset = image.tell()
+            if image.id == 77:
+                pdb.set_trace()
+            agmiBuf = agmiBuf[ image.tell(): ]
 
     # AGMI0 appears to be unused/editor UI images
     # AGMI1 appears to be the images actually used in the game
     images = AGMIs[ 1 ]
             
     # Parse application
-    app = MmfApplication( buf, 0 )
+    app = MmfApplication( buf )
             
     # If outdir is specified, dump everything
     if args.outDir:

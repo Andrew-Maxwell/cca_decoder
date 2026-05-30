@@ -154,15 +154,16 @@ class AgmiHeader( MmfObject ):
         r = self.getU( 1 )
         null = self.getU( 1 )
         assert null == 0
-        return ( r, g, b )
+        return ( r, g, b, 255 )
 
 FLAG_24BPP = 0x0404
 FLAG_16BPP = 0x0206
 FLAG_8_BIT_INDEX = 0x0103
 
 class MmfImage( MmfObject ):
-    def __init__( self, buf, header, agmiID ):
+    def __init__( self, buf, header, agmiID, transparentColor ):
         super().__init__( buf )
+        self.transparentColor = transparentColor
         self.id = self.getU( 4 )
         self.unknown = self.getU( 2 )
         self.alwaysOne = self.getU( 4 )
@@ -189,14 +190,17 @@ class MmfImage( MmfObject ):
             b = self.getU( 1 )
             g = self.getU( 1 )
             r = self.getU( 1 )
-            return ( r, g, b )
+            pixel = ( r, g, b, 255 )
         elif self.flags == FLAG_16BPP:
             assert False
         elif self.flags == FLAG_8_BIT_INDEX:
             index = self.getU( 1 )
-            return header.palette[ index ]
+            pixel = header.palette[ index ]
         else:
             assert False
+        if pixel == self.transparentColor:
+            pixel = ( 0, 0, 0, 0 )
+        return pixel
 
     def readImage( self ):
 
@@ -534,12 +538,18 @@ if __name__ == '__main__':
     parser.add_argument( "-b", "--binaryAnnotate",
                          help="include original binary in Godot object description",
                          action="store_true" )
+    parser.add_argument( "--transparentColor",
+                         help="Hex format color for transparent background in images",
+                         type=str,
+                         default="000000" )
     args = parser.parse_args()
 
     debug = args.verbose
     annotate = args.annotate
     binAnnotate = args.binaryAnnotate
-    
+    bgColor = int( args.transparentColor, 16 )
+    transparencyColor = ( bgColor >> 16, bgColor >> 8 & 0xff, bgColor & 0xff, 255 )
+
     cca = open( args.inFile, 'rb' )
     
     buf = Buffer( cca.read() )
@@ -556,11 +566,9 @@ if __name__ == '__main__':
         for imageCnt in range( header.spriteCount ):
             # Note: We don't know how long an image is until we parse it.
             # So just slice off each image from the start of the buffer as we find them.
-            image = MmfImage( agmiBuf, header, agmiID )
+            image = MmfImage( agmiBuf, header, agmiID, transparencyColor )
             print( f'  found image: {image.width}x{image.height} {image.name} at 0x{agmiBuf.baseOffset:x}' )
             AGMIs[ agmiID ][ image.id ] = image
-            if image.id == 77:
-                pdb.set_trace()
             agmiBuf = agmiBuf[ image.tell(): ]
 
     # AGMI0 appears to be unused/editor UI images

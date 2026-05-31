@@ -260,7 +260,7 @@ class Item( MmfObject ):
         self.go( self.idKey )
         self.id = self.getU( 4 )
         self.gdResource = None        
-        print( f"    Parsing {self.header.decode()} {self.name}" )
+        print( f"    Parsing {self.header.decode()} {self.name} itemId {self.id}" )
     
 class BackdropItem( Item ):
     header = b'LBackdropItem'
@@ -278,8 +278,6 @@ class BackdropItem( Item ):
         # Update the image name to something more human-readable (hopefully)
         # Include the original ID to avoid cross-level name collisions
         image.name = f'{self.name}-0x{image.id:x}'
-        self.origin = ( image.hotspotX, image.hotspotY )
-        print( f"{image.name} origin: {self.origin}" )
 
     def write( self, levelScene ):
         # Since backdrops are static images, just add an external resource
@@ -409,7 +407,6 @@ class Instance( MmfObject ):
             if annotate:
                 self.doAnnotate( node )
         elif type( item ) == BackdropItem:
-            offset = godot_parser.Vector2( -1 * item.origin[ 0 ], -1 * item.origin[ 1 ] )
             node =godot_parser.Node(
                 f'{item.name}_{self.id}',
                 type='Sprite',
@@ -417,7 +414,6 @@ class Instance( MmfObject ):
                     'texture': item.gdResource.reference,
                     'position': gdPosition,
                     'centered': False,
-                    'offset': offset
                 }
             )
             if annotate:
@@ -478,7 +474,7 @@ class MmfLevel( MmfObject ):
                 instance = Instance( self.buf[ self.offset : self.offset + 32 ] )
                 trace( f"    Found instance {instance.id}" )
                 instances.append( instance )
-                self.skip( 32 )
+            self.skip( 32 )                
         instances.reverse()
         return instances
 

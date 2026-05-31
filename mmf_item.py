@@ -147,6 +147,7 @@ class Instance( mmf_util.MmfObject ):
         # Also observed last element as e.g. 0
         # assert self.getU( 4 ) == 0xFFFFFFFF
 
+    # NOTE: writeInstance takes a Node instead of the usual Scene
     def writeInstance( self, outDir, annotate, levelRoot, items ):
         item = items.get( self.itemId, None )
         if not item:

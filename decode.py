@@ -369,6 +369,12 @@ class ActiveItem( Item ):
             )
             if annotate:
                 self.doAnnotate( node )
+                # Include annotations for all animation frames
+                # because where else would we put it?
+                for anix in self.animations:
+                    for dirx in anix:
+                        for imageId in dirx:
+                            images[ imageId ].doAnnotate( node )
             itemTree.root.add_child( node )
         path = f'{ITEM_DIR}/{self.name}-{self.id}.tscn'
         gdItemScene.write( f'./{outDir}/{path}' )

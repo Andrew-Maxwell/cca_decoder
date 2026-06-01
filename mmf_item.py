@@ -9,7 +9,7 @@ class Item( mmf_util.MmfObject ):
         super().__init__( buf )
         self.go( b'ItNa' )
         self.skip( 24 )
-        self.name = self.bite( mmf_util.END4 ).decode( 'cp1252', errors='replace' )
+        self.name = self.bite( mmf_util.END4 ).decode()
         self.seek( 0 )
         self.go( self.idKey )
         self.id = self.getU( 4 )

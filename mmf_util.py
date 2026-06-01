@@ -40,6 +40,9 @@ class Buffer( bytes ):
     def __format__( self, format_spec ):
         return f"@0x{self.baseOffset:x}:  {super().__format__( format_spec )}"
 
+    def decode():
+        return super().decode( 'cp1252', errors='replace' )
+    
 def safeName( string ):
     string = string.replace( ' ', '-' )
     string = "".join( [ c for c in string if c.isalnum() or c in [ '-', '_' ] ] )

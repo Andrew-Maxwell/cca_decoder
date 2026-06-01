@@ -1,6 +1,8 @@
 import re
+import pdb
 
 END4 = b'\x00\x04' # Often used as string terminator
+_4END = b'\x04\x00' # Sometimes it's reversed?
 IMAGE_DIR = 'sprites'
 ITEM_DIR = 'objects'
 DGTS = 4 # How many digits to include in e.g. id numbers in names
@@ -40,7 +42,7 @@ class Buffer( bytes ):
     def __format__( self, format_spec ):
         return f"@0x{self.baseOffset:x}:  {super().__format__( format_spec )}"
 
-    def decode():
+    def decode( self ):
         return super().decode( 'cp1252', errors='replace' )
     
 def safeName( string ):
@@ -101,7 +103,7 @@ class MmfObject:
         # seek to right AFTER the first match of the pattern
         self.seek( self.search( pattern ) + len( pattern ) )
 
-    def bite( self, pattern, end=None, length=None ):
+    def bite( self, pattern, patternIs='start', end=None, length=None ):
         # Get the next object in a list of objects
         # where each object's header matches "pattern."
         if end is None:
@@ -113,7 +115,10 @@ class MmfObject:
         # Ignore matches that are right at the current offset for easy repetition
         m = regex.search( self.buf, pos=self.offset + 1, endpos=end )
         if m:
-            end = m.start()
+            if patternIs == 'start': # Pattern marks the start, cut before it
+                end = m.start()
+            else: # Pattern marks the end, cut after it
+                end = m.end()
         start = self.offset
         self.offset = end
         return self.buf[ start : end ]
@@ -121,7 +126,7 @@ class MmfObject:
     def doAnnotate( self, node, description="", dump=True ):
         if description:
             description = f'\n\n{description}\n'
-        description += f"{self.name} id {self.id} @{self.buf.baseOffset} {type( self ).__name__}\n"
+        description += f"{self.name} id {self.id} @{self.buf.baseOffset:x} {type( self ).__name__}\n"
         if dump:
             exclude = [ 'offset', 'result', 'gdResource', 'buf', 'name' ]
             garbage = [ f'{key}: {val}' for key, val in vars( self ).items() if key not in exclude ]

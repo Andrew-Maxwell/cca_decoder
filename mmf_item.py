@@ -19,6 +19,19 @@ class ItemTag( mmf_util.MmfObject ):
 
     def parseContents( self, buf ):
         contents = []
+        # Initial 2 words always appear
+        if self.format == 0xD: # Colors; background and tint?
+            for _ in range( 2 ):
+                contents.append( (
+                    self.getU( 1 ),
+                    self.getU( 1 ),
+                    self.getU( 1 ),
+                    255 ) )
+                self.skip( 1 )
+        else:
+            contents.append( ( self.getU( 4 ), self.getU( 4 ) ) )
+
+        # Sometimes there is some additional content
         for _ in range( self.elements - 1 ):
             if self.format == 0x1: # Flags?
                 contents.append( (
@@ -29,18 +42,10 @@ class ItemTag( mmf_util.MmfObject ):
                     self.getU( 4 ),
                     self.getU( 4 ) ) )
             elif self.format == 0x4: # String
-                self.skip( 8 )
                 length = self.getU( 4 )
                 contents.append( self.read( length ).decode() )
-            elif self.format == 0xD: # Colors; background and tint?
-                for _ in range( 2 ):
-                    contents.append( (
-                        self.getU( 1 ),
-                        self.getU( 1 ),
-                        self.getU( 1 ),
-                        255 ) )
             elif self.format in [ 0xa, 0xb, 0x19 ]: # ???
-                contents.append( ( self.getU( 4 ), self.getU( 4 ) ) )
+                pass
             else:
                 mmf_util.trace( f"      item tag {self.name} "
                                 f"@0x{self.buf.baseOffset:x} "
@@ -55,7 +60,7 @@ class ItemTag( mmf_util.MmfObject ):
             ret = ""
             for line in self.contents:
                 ret += str( [ f"0x{val:x}" for val in line ] )
-                ret += ", "
+                ret += ','
             return ret
 
 class Item( mmf_util.MmfObject ):
@@ -76,12 +81,33 @@ class Item( mmf_util.MmfObject ):
             tag = ItemTag( tagBuf )
             self.tags[ tag.name ] = tag
 
-        self.name = mmf_util.safeName( self.tags[ 'ItNa' ].contents[ 0 ] )
+        self.name = self.getName()
         self.go( self.idKey )
         self.id = self.getU( 4 )
         print( f"      name {self.name} id {self.id}" )
         self.gdResource = None        
-    
+
+    def getName( self ):
+        try:
+            return mmf_util.safeName( self.tags[ 'ItNa' ].contents[ 1 ] )
+        except Exception as e:
+            print( e )
+            return "Unnamed"
+        
+    def visible( self ):
+        if 'Visi' in self.tags:
+            flag = self.tags[ 'Visi' ].contents[ 0 ][ 1 ] 
+            assert flag in [ 0x1, 0x2 ]
+            return flag == 0x2
+        return True
+
+    def opacity( self ):
+        if 'InkF' in self.tags:
+            value = self.tags[ 'InkF'].contents[ 2 ][ 5 ]
+            assert value <= 0x80
+            return ( 0x80 - value ) / 0x80
+        return 1
+
 class BackdropItem( Item ):
     header = b'LBackdropItem'
     idKey = b'SBOs'
@@ -165,7 +191,7 @@ class ActiveItem( Item ):
                     'name': ( f'anix{mmfAnimId:0{mmf_util.DGTS}}_'
                               f'{mmfDirId:0{mmf_util.DGTS}}' ),
                     'speed': 5.0,
-                    'frames': frameRefs
+                    'frames': frameRefs,
                 } )
                 
         gdFrames = gdItemScene.add_sub_resource( "SpriteFrames" )
@@ -175,17 +201,23 @@ class ActiveItem( Item ):
             itemTree.root = godot_parser.Node( self.name, type="Area2D" )
             # All subnodes of this node are treated as a group
             itemTree.root[ '__meta__' ] = { '"_edit_group_"': True }
-            node = godot_parser.Node(
-                f'{self.name}Sprites',
-                type='AnimatedSprite',
-                properties={
-                    'frames': gdFrames.reference,
-                    'animation': gdAnimations[ 0 ][ 'name' ],
-                    'offset': godot_parser.Vector2(
-                        -1 * self.origin[ 0 ], -1 * self.origin[ 1 ] ),
-                    'centered': False
-                }
-            )
+            nodeProperties={
+                'frames': gdFrames.reference,
+                'animation': gdAnimations[ 0 ][ 'name' ],
+                'centered': False
+            }
+            if self.origin[ 0 ] or self.origin[ 1 ]:
+                nodeProperties[ 'offset' ] = \
+                    godot_parser.Vector2( -1 * self.origin[ 0 ], -1 * self.origin[ 1 ] )
+            if not self.visible():
+                nodeProperties[ 'visible' ] = False
+            if self.opacity() != 1:
+                nodeProperties[ 'self_modulate' ] = \
+                    godot_parser.Color( 1, 1, 1, self.opacity() )
+
+            node = godot_parser.Node( f'{self.name}Sprites',
+                                      type='AnimatedSprite',
+                                      properties=nodeProperties )
             if annotate:
                 self.doAnnotate( node )
                 # Include annotations for all animation frames
@@ -229,14 +261,21 @@ class Instance( mmf_util.MmfObject ):
             if annotate:
                 self.doAnnotate( node )
         elif type( item ) == BackdropItem:
+            nodeProperties={
+                'texture': item.gdResource.reference,
+                'position': gdPosition,
+                'centered': False,
+                'z_index': -1
+            }
+            if not item.visible():
+                nodeProperties[ 'visible' ] = False
+            if item.opacity() != 1:
+                nodeProperties[ 'self_modulate' ] = \
+                    godot_parser.Color( 1, 1, 1, self.opacity() )
             node =godot_parser.Node(
                 f'{item.name}_{self.id}',
                 type='Sprite',
-                properties={
-                    'texture': item.gdResource.reference,
-                    'position': gdPosition,
-                    'centered': False,
-                }
+                properties=nodeProperties
             )
             if annotate:
                 self.doAnnotate( node )

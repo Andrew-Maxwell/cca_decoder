@@ -51,7 +51,6 @@ class Level( MmfObject ):
                 trace( f"    Found instance {instance.id}" )
                 instances.append( instance )
             self.skip( 32 )                
-        instances.reverse()
         return instances
 
     def writeLevel( self, outDir, annotate, gameScene ):

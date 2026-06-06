@@ -245,6 +245,12 @@ class Instance( mmf_util.MmfObject ):
         # Also observed last element as e.g. 0
         # assert self.getU( 4 ) == 0xFFFFFFFF
 
+    def canBeTile( self, tileSize ):
+        return ( type( self.item ) == BackdropItem and
+                 self.x % tileSize == 0 and self.y % tileSize == 0 and
+                 self.item.image.width == tileSize and
+                 self.item.image.height == tileSize )
+        
     # NOTE: writeInstance takes a Node instead of the usual Scene
     def writeInstance( self, outDir, annotate, levelRoot ):
         if not self.item:
@@ -271,7 +277,7 @@ class Instance( mmf_util.MmfObject ):
             if self.item.opacity() != 1:
                 nodeProperties[ 'self_modulate' ] = \
                     godot_parser.Color( 1, 1, 1, self.item.opacity() )
-            node =godot_parser.Node(
+            node = godot_parser.Node(
                 f'{self.item.name}_{self.id}',
                 type='Sprite',
                 properties=nodeProperties

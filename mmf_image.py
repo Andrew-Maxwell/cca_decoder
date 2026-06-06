@@ -1,3 +1,4 @@
+import godot_parser
 import mmf_util
 from PIL import Image
 from pathlib import Path
@@ -145,26 +146,48 @@ def writeImageFiles( outDir, AGMIs ):
         Path( imagesPath ).mkdir( parents=True, exist_ok=True )
         for AGMI in AGMIs:
             for image in AGMI.values():
-                image.result.save( f'{imagesPath}/{image.name}.png' )
+                if image.writePng:
+                    image.result.save( f'{imagesPath}/{image.name}.png' )
 
 class Atlas:
 
-    def __init__( self, spriteSize, images ):
+    def __init__( self, spriteSize, images, name ):
+        self.name = name
+        self.spriteSize = spriteSize
         self.sprites = {} # imageId : position in atlas
-        width = ceil( len( images ) ** 0.5 ) # in sprites
-        textureSize = width * spriteSize
+        self.width = ceil( len( images ) ** 0.5 ) # in sprites
+        textureSize = self.width * spriteSize
         if textureSize > 2048:
             print( f"***WARNING***: Atlas size {textureSize} > 2048" )
         offset = 0
         self.texture = Image.new( "RGBA", ( textureSize, textureSize ), color=(0, 0, 0, 0) )
         for image in images:
             assert image.width == image.height == spriteSize
-            assert offset < width * width
-            xPos = ( offset % width ) * spriteSize
-            yPos = ( offset // width ) * spriteSize
+            assert offset < self.width * self.width
+            xPos = offset % self.width
+            yPos = offset // self.width
             offset += 1
-            self.texture.paste( image.result, ( xPos, yPos ) )
+            self.texture.paste( image.result, ( xPos * spriteSize, yPos * spriteSize ) )
             self.sprites[ image.id ] = ( xPos, yPos )
+        self.textureResource = None
+        self.subResource = None
 
-    def writeTexture( self, outDir, levelName ):
-        self.texture.save( f"./{outDir}/{mmf_util.IMAGE_DIR}/{levelName}.png" )
+    def texturePath( self ):
+        return f"{mmf_util.IMAGE_DIR}/{self.name}.png"
+    
+    def writeTexture( self, outDir ):
+        self.texture.save( f'./{outDir}/{self.texturePath()}' )
+
+    def writeTileSet( self, levelScene ):
+        self.textureResource = \
+            levelScene.add_ext_resource( f'res://{self.texturePath()}', 'Texture' )
+        self.subResource = levelScene.add_sub_resource( "TileSet" )
+        self.subResource[ "0/name" ] = f"{self.name}_0"
+        self.subResource[ "0/texture" ] = self.textureResource.reference
+        self.subResource[ "0/region" ] = \
+            godot_parser.GDObject( "Rect2", 0, 0, self.texture.width, self.texture.height )
+        self.subResource[ "0/tile_mode" ] = 2
+        self.subResource[ "0/autotile/tile_size" ] = \
+            godot_parser.Vector2( self.spriteSize, self.spriteSize )
+        self.subResource[ "0/z_index" ] = -1
+        

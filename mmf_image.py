@@ -149,28 +149,49 @@ def writeImageFiles( outDir, AGMIs ):
                 if image.writePng:
                     image.result.save( f'{imagesPath}/{image.name}.png' )
 
-class Atlas:
+class TileSet:
 
-    def __init__( self, spriteSize, images, name ):
+    def __init__( self, tileSize, images, name ):
         self.name = name
-        self.spriteSize = spriteSize
-        self.sprites = {} # imageId : position in atlas
-        self.width = ceil( len( images ) ** 0.5 ) # in sprites
-        textureSize = self.width * spriteSize
-        if textureSize > 2048:
-            print( f"***WARNING***: Atlas size {textureSize} > 2048" )
-        offset = 0
-        self.texture = Image.new( "RGBA", ( textureSize, textureSize ), color=(0, 0, 0, 0) )
-        for image in images:
-            assert image.width == image.height == spriteSize
-            assert offset < self.width * self.width
-            xPos = offset % self.width
-            yPos = offset // self.width
-            offset += 1
-            self.texture.paste( image.result, ( xPos * spriteSize, yPos * spriteSize ) )
-            self.sprites[ image.id ] = ( xPos, yPos )
+        self.tileSize = tileSize
+        self.tileTexturePositions = {} # imageId : 2d array of tile positions in texture
         self.textureResource = None
         self.subResource = None
+        
+        maxTiles = 0
+
+        # Each tile is of the same size; larger images are split across multiple tiles
+        # with no effort to arrange them sensibly for now
+        for image in images:
+            assert image.width % tileSize == 0
+            assert image.height % tileSize == 0
+            maxTiles += image.width // tileSize * image.height // tileSize
+        
+        self.width = ceil( maxTiles ** 0.5 ) # in tiles
+        textureSize = self.width * tileSize
+        if textureSize > 2048:
+            print( f"***WARNING***: TileSet size {textureSize} > 2048" )
+        tileIdx = 0
+        self.texture = Image.new( "RGBA", ( textureSize, textureSize ), color=(0, 0, 0, 0) )
+
+        # Store each image as a 2d array of indexes (NOT image scaled) into the texture
+        for image in images:
+            tilePositions = []
+            for ySrc in range( 0, image.height, tileSize ):
+                tilePositionsRow = []
+                for xSrc in range( 0, image.width, tileSize ):
+                    assert tileIdx < self.width * self.width
+                    xPos = tileIdx % self.width
+                    yPos = tileIdx // self.width
+                    tileIdx += 1
+                    # CAUTION: PIL uses (x, y) coordinates but everywhere else we use Godot's
+                    # (y, x) coordinates. Fortunately they both have origin upper left at least
+                    srcRect = ( xSrc, ySrc, xSrc + tileSize, ySrc + tileSize )
+                    tile = image.result.crop( srcRect )
+                    self.texture.paste( tile, ( xPos * tileSize, yPos * tileSize ) )
+                    tilePositionsRow.append( ( yPos, xPos ) )
+                tilePositions.append( tilePositionsRow )
+            self.tileTexturePositions[ image.id ] = tilePositions
 
     def texturePath( self ):
         return f"{mmf_util.IMAGE_DIR}/{self.name}.png"
@@ -188,6 +209,5 @@ class Atlas:
             godot_parser.GDObject( "Rect2", 0, 0, self.texture.width, self.texture.height )
         self.subResource[ "0/tile_mode" ] = 2
         self.subResource[ "0/autotile/tile_size" ] = \
-            godot_parser.Vector2( self.spriteSize, self.spriteSize )
-        self.subResource[ "0/z_index" ] = -1
+            godot_parser.Vector2( self.tileSize, self.tileSize )
         

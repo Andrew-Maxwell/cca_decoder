@@ -236,20 +236,24 @@ class Instance( mmf_util.MmfObject ):
     def __init__( self, buf, items ):
         super().__init__( buf )
         assert self.read( 4 ) == b'Inst'
-        self.x = self.getU( 4 )
-        self.y = self.getU( 4 )
+        self.x = self.getS( 4 )
+        self.y = self.getS( 4 )
         self.id = self.getU( 4 )
         self.unknown1 = self.getU( 4 )
         self.unknown2 = self.getU( 4 )
         self.item = items.get( self.getU( 4 ), None )
+        if type( self.item ) == BackdropItem:
+            self.zIndex = mmf_util.BACKDROP_Z_INDEX
+        else:
+            self.zIndex = mmf_util.ACTIVE_Z_INDEX
         # Also observed last element as e.g. 0
         # assert self.getU( 4 ) == 0xFFFFFFFF
 
     def canBeTile( self, tileSize ):
         return ( type( self.item ) == BackdropItem and
                  self.x % tileSize == 0 and self.y % tileSize == 0 and
-                 self.item.image.width == tileSize and
-                 self.item.image.height == tileSize )
+                 self.item.image.width % tileSize == 0 and
+                 self.item.image.height % tileSize == 0 )
         
     # NOTE: writeInstance takes a Node instead of the usual Scene
     def writeInstance( self, outDir, annotate, levelRoot ):
@@ -261,7 +265,7 @@ class Instance( mmf_util.MmfObject ):
                 f'{self.item.name}_{self.id}',
                 type='Area2D',
                 instance=self.item.gdResource.id,
-                properties={ 'position': gdPosition }
+                properties={ 'position': gdPosition, 'z_index': self.zIndex }
             )
             if annotate:
                 self.doAnnotate( node )
@@ -270,7 +274,7 @@ class Instance( mmf_util.MmfObject ):
                 'texture': self.item.gdResource.reference,
                 'position': gdPosition,
                 'centered': False,
-                'z_index': -1
+                'z_index': self.zIndex,
             }
             if not self.item.visible():
                 nodeProperties[ 'visible' ] = False

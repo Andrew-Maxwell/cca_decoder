@@ -271,7 +271,7 @@ class Instance( mmf_util.MmfObject ):
                 nodeProperties[ 'visible' ] = False
             if item.opacity() != 1:
                 nodeProperties[ 'self_modulate' ] = \
-                    godot_parser.Color( 1, 1, 1, self.opacity() )
+                    godot_parser.Color( 1, 1, 1, item.opacity() )
             node =godot_parser.Node(
                 f'{item.name}_{self.id}',
                 type='Sprite',

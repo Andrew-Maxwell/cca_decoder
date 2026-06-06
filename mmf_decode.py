@@ -21,6 +21,9 @@ if __name__ == '__main__':
                          help="Hex format color for transparent background in images",
                          type=str,
                          default="000000" )
+    parser.add_argument( "-t", "--tileSize",
+                         type=int,
+                         help="Tile size for tileMap, if not specified none is generated." )
     args = parser.parse_args()
 
     mmf_util.debug = args.verbose
@@ -36,8 +39,10 @@ if __name__ == '__main__':
     # AGMI0 seems to be unused assets, editor icons, etc.
     # AGMI1 appears to everything contained in the game itself
 
+    tileSize = args.tileSize if args.tileSize else None
+    
     # Parse application
-    app = Application( buf, AGMIs[ 1 ] )
+    app = Application( buf, AGMIs[ 1 ], tileSize )
             
     # If outdir is specified, dump everything
     if args.outDir:

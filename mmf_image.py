@@ -1,6 +1,9 @@
 import mmf_util
 from PIL import Image
 from pathlib import Path
+from math import ceil
+
+import pdb
 
 class AgmiHeader( mmf_util.MmfObject ):
     def __init__( self, buf ):
@@ -50,6 +53,8 @@ class MmfImage( mmf_util.MmfObject ):
         # Now that we know how long the image is, truncate the buffer to only
         # include the binary data for this image.
         self.buf = self.buf[ :self.tell() ]
+        # Set to False if included in an atlas
+        self.writePng = True
 
     def getPixel( self ):
         if self.flags == self.FLAG_24BPP:
@@ -142,3 +147,24 @@ def writeImageFiles( outDir, AGMIs ):
             for image in AGMI.values():
                 image.result.save( f'{imagesPath}/{image.name}.png' )
 
+class Atlas:
+
+    def __init__( self, spriteSize, images ):
+        self.sprites = {} # imageId : position in atlas
+        width = ceil( len( images ) ** 0.5 ) # in sprites
+        textureSize = width * spriteSize
+        if textureSize > 2048:
+            print( f"***WARNING***: Atlas size {textureSize} > 2048" )
+        offset = 0
+        self.texture = Image.new( "RGBA", ( textureSize, textureSize ), color=(0, 0, 0, 0) )
+        for image in images:
+            assert image.width == image.height == spriteSize
+            assert offset < width * width
+            xPos = ( offset % width ) * spriteSize
+            yPos = ( offset // width ) * spriteSize
+            offset += 1
+            self.texture.paste( image.result, ( xPos, yPos ) )
+            self.sprites[ image.id ] = ( xPos, yPos )
+
+    def writeTexture( self, outDir, levelName ):
+        self.texture.save( f"./{outDir}/{mmf_util.IMAGE_DIR}/{levelName}.png" )

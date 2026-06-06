@@ -233,7 +233,7 @@ class ActiveItem( Item ):
     
 class Instance( mmf_util.MmfObject ):
 
-    def __init__( self, buf ):
+    def __init__( self, buf, items ):
         super().__init__( buf )
         assert self.read( 4 ) == b'Inst'
         self.x = self.getU( 4 )
@@ -241,39 +241,38 @@ class Instance( mmf_util.MmfObject ):
         self.id = self.getU( 4 )
         self.unknown1 = self.getU( 4 )
         self.unknown2 = self.getU( 4 )
-        self.itemId = self.getU( 4 )
+        self.item = items.get( self.getU( 4 ), None )
         # Also observed last element as e.g. 0
         # assert self.getU( 4 ) == 0xFFFFFFFF
 
     # NOTE: writeInstance takes a Node instead of the usual Scene
-    def writeInstance( self, outDir, annotate, levelRoot, items ):
-        item = items.get( self.itemId, None )
-        if not item:
+    def writeInstance( self, outDir, annotate, levelRoot ):
+        if not self.item:
             return
         gdPosition = godot_parser.Vector2( self.x, self.y )
-        if type( item ) == ActiveItem:
+        if type( self.item ) == ActiveItem:
             node = godot_parser.Node(
-                f'{item.name}_{self.id}',
+                f'{self.item.name}_{self.id}',
                 type='Area2D',
-                instance=item.gdResource.id,
+                instance=self.item.gdResource.id,
                 properties={ 'position': gdPosition }
             )
             if annotate:
                 self.doAnnotate( node )
-        elif type( item ) == BackdropItem:
+        elif type( self.item ) == BackdropItem:
             nodeProperties={
-                'texture': item.gdResource.reference,
+                'texture': self.item.gdResource.reference,
                 'position': gdPosition,
                 'centered': False,
                 'z_index': -1
             }
-            if not item.visible():
+            if not self.item.visible():
                 nodeProperties[ 'visible' ] = False
-            if item.opacity() != 1:
+            if self.item.opacity() != 1:
                 nodeProperties[ 'self_modulate' ] = \
-                    godot_parser.Color( 1, 1, 1, item.opacity() )
+                    godot_parser.Color( 1, 1, 1, self.item.opacity() )
             node =godot_parser.Node(
-                f'{item.name}_{self.id}',
+                f'{self.item.name}_{self.id}',
                 type='Sprite',
                 properties=nodeProperties
             )
@@ -282,8 +281,8 @@ class Instance( mmf_util.MmfObject ):
                 # only Nodes can have editor descriptions
                 # But images/backdropItems are just an ExternalResource
                 # So we need to add annotations to the instance Sprite node
-                item.doAnnotate( node, description="***ITEM:***" )
-                item.image.doAnnotate( node, description="***IMAGE:***" )
+                self.item.doAnnotate( node, description="***ITEM:***" )
+                self.item.image.doAnnotate( node, description="***IMAGE:***" )
         else:
             assert False
                 

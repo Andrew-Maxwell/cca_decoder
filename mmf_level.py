@@ -1,12 +1,13 @@
 import godot_parser
 from mmf_item import ActiveItem, BackdropItem, Instance
 from mmf_util import MmfObject, safeName, END4, trace
+from mmf_image import Atlas
 import re
 
 class Level( MmfObject ):
     header = b'Fram\00{8}v1.5.{8}LFrame'
     
-    def __init__( self, buf, images ):
+    def __init__( self, buf, images, tileSize=None ):
         super().__init__( buf )
         self.go( self.header )
         self.go( b'Tit' )
@@ -15,6 +16,10 @@ class Level( MmfObject ):
         print( f"  Parsing level {self.name}" )        
         self.items = self.readItems( images )
         self.instances = self.readInstances()
+        if tileSize:
+            self.tileset = self.createTileset( self.instances, tileSize )
+        else:
+            self.tileset = None
 
     def readItems( self, images ):
         items = {}
@@ -47,12 +52,28 @@ class Level( MmfObject ):
         for _ in range( instanceCount ):
             # Instance list can also contain e.g. IPIn ?            
             if self.buf[ self.offset : self.offset + 4 ] == b'Inst':
-                instance = Instance( self.buf[ self.offset : self.offset + 32 ] )
+                instance = Instance( self.buf[ self.offset : self.offset + 32 ], self.items )
                 trace( f"    Found instance {instance.id}" )
-                instances.append( instance )
+                if instance.item:
+                    instances.append( instance )
+                else:
+                    trace( f"      Skipping; no valid item" )
             self.skip( 32 )                
         return instances
 
+    def createTileset( self, instances, tileSize ):
+        tiles = set()
+        for instance in instances:
+            if ( type( instance.item ) == BackdropItem and
+                 instance.x % tileSize == 0 and instance.y % tileSize == 0 and
+                 instance.item.image.width == tileSize and
+                 instance.item.image.height == tileSize ):
+                tiles.add( instance.item.image )
+        if tiles:
+            return Atlas( tileSize, tiles )
+        return None
+            
+        
     def writeLevel( self, outDir, annotate, gameScene ):
         levelScene = godot_parser.GDScene()
         with levelScene.use_tree() as levelTree:
@@ -60,7 +81,7 @@ class Level( MmfObject ):
             for item in self.items.values():
                 item.writeItem( outDir, annotate, levelScene )
             for instance in self.instances:
-                instance.writeInstance( outDir, annotate, levelTree.root, self.items )
+                instance.writeInstance( outDir, annotate, levelTree.root )
         path = f'{self.name}.tscn'
         levelScene.write( f'./{outDir}/{path}' )
         gdResource = gameScene.add_ext_resource( f'res://{path}', 'PackedScene' )
@@ -68,9 +89,12 @@ class Level( MmfObject ):
             gameTree.root.add_child(
                 godot_parser.Node( self.name, type="Node",instance=gdResource.id ) )
 
+        if self.tileset:
+            self.tileset.writeTexture( outDir, self.name )
+
 class Application( MmfObject ):
     
-    def __init__( self, buf, images ):
+    def __init__( self, buf, images, tileSize=None ):
         super().__init__( buf )
         self.go( b'LApplication' )
         self.go( b'Abou' )
@@ -79,14 +103,14 @@ class Application( MmfObject ):
         self.skip( 16 )
         self.author = self.bite( END4 ).decode()
         print( f"Parsing app {self.name} by {self.author}" )        
-        self.levels = self.readLevels( images )
+        self.levels = self.readLevels( images, tileSize )
 
-    def readLevels( self, images ):
+    def readLevels( self, images, tileSize=None ):
         levels = []
         # Go to start of first Level.header
         self.seek( self.search( Level.header ) )
         while ( levelBuf := self.bite( Level.header ) ):
-            levels.append( Level( levelBuf, images ) )
+            levels.append( Level( levelBuf, images, tileSize ) )
         return levels
 
     def writeApp( self, outDir, annotate ):

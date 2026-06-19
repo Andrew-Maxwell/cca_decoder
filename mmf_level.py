@@ -61,7 +61,6 @@ class TileMap:
                 'z_index': mmf_util.TILE_Z_INDEX,
                 'tile_set': self.tileSet.subResource.reference,
                 'cell_size': godot_parser.Vector2( tileSize, tileSize ),
-                'cell_quadrant_size': tileSize // 2, # Not sure what this does
                 'cell_custom_transform': gdTransform,
                 'format': 1,
                 'tile_data': gdTileArray,

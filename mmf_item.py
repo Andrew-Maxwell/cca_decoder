@@ -198,7 +198,7 @@ class ActiveItem( Item ):
         gdFrames[ "animations" ] = gdAnimations
         
         with gdItemScene.use_tree() as itemTree:
-            itemTree.root = godot_parser.Node( self.name, type="Area2D" )
+            itemTree.root = godot_parser.Node( self.name, type="Node2D" )
             # All subnodes of this node are treated as a group
             itemTree.root[ '__meta__' ] = { '"_edit_group_"': True }
             nodeProperties={

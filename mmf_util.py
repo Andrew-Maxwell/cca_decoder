@@ -8,8 +8,8 @@ ITEM_DIR = 'objects'
 DGTS = 4 # How many digits to include in e.g. id numbers in names
 
 BACKGROUND_Z_INDEX = -300
-TILE_Z_INDEX = -200
-BACKDROP_Z_INDEX = -100
+BACKDROP_Z_INDEX = -200
+TILE_Z_INDEX = -100
 ACTIVE_Z_INDEX = 0
 
 debug = False

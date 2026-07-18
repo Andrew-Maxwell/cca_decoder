@@ -157,7 +157,7 @@ class Level( mmf_util.MmfObject ):
         return tileMap
     
     def writeLevel( self, annotate ):
-        levelPath = mmf_util.filePath( mmf_util.safeName( self.name ) )
+        levelPath = mmf_util.filePath( self.name )
         Path( levelPath ).mkdir( parents=True, exist_ok=True )
         if self.items:
             itemPath = f'{levelPath}/{mmf_util.ITEM_DIR}'
@@ -177,8 +177,7 @@ class Level( mmf_util.MmfObject ):
             self.tileSet.writeTileSet( levelScene )
             self.tileMap.writeTileMap( levelScene )
 
-        path = f'{self.name}.tscn'        
-        levelScene.write( mmf_util.filePath( path ) )
+        levelScene.write( f'{levelPath}/{self.name}.tscn' )
 
 class Application( mmf_util.MmfObject ):
     

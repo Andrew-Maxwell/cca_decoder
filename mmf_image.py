@@ -171,6 +171,7 @@ class TileSet:
         self.tileTexturePositions = {} # imageId : 2d array of tile positions in texture
         self.textureResource = None
         self.subResource = None
+        self.opaque = {} # tile pos in texture : whether that tile is fully opaque
         
         maxTiles = 0
 
@@ -203,6 +204,9 @@ class TileSet:
                     srcRect = ( xSrc, ySrc, xSrc + tileSize, ySrc + tileSize )
                     tile = image.result.crop( srcRect )
                     self.texture.paste( tile, ( xPos * tileSize, yPos * tileSize ) )
+                    # If the minumum alpha channel value is 255, the entire tile is opaque
+                    isOpaque = ( tile.getextrema()[ 3 ][ 0 ] == 255 )   
+                    self.opaque[ ( yPos, xPos ) ] = isOpaque
                     tilePositionsRow.append( ( yPos, xPos ) )
                 tilePositions.append( tilePositionsRow )
             self.tileTexturePositions[ image.id ] = tilePositions

@@ -20,10 +20,12 @@ class TileMap:
         # Check if any tile which the split image would overlap already has a tile
         tileSrcPositions = self.tileSet.tileTexturePositions[ instance.item.image.id ]
         imageOrigin = ( instance.y // tileSize, instance.x // tileSize )
-        for row, _ in enumerate( tileSrcPositions ):
-            for col, _ in enumerate( tileSrcPositions[ 0 ] ):
+        for row, srcRow in enumerate( tileSrcPositions ):
+            for col, tileTexturePos in enumerate( srcRow ):
                 dstPos = ( imageOrigin[ 0 ] + row, imageOrigin[ 1 ] + col )
-                if dstPos in self.tiles:
+                # If the new tile is fully opaque, we can discard the old one
+                opaque = self.tileSet.opaque[ tileTexturePos ]
+                if dstPos in self.tiles and not opaque:
                     return False
 
         # If not, go ahead and place the tiles associated with this image
@@ -57,7 +59,7 @@ class TileMap:
             'Transform2D', tileSize, 0, 0, tileSize, 0, 0 )
         
         tileMapNode = godot_parser.Node(
-            f'TileMap_{self.tileSet.name}',
+            self.tileSet.name(),
             type='TileMap',
             properties={
                 'z_index': mmf_util.TILE_Z_INDEX,
@@ -154,7 +156,7 @@ class Level( mmf_util.MmfObject ):
         self.instances = [ i for i in self.instances if not tileMap.maybeAddTiles( i ) ]
         return tileMap
     
-    def writeLevel( self, annotate, gameScene ):
+    def writeLevel( self, annotate ):
         levelPath = mmf_util.filePath( mmf_util.safeName( self.name ) )
         Path( levelPath ).mkdir( parents=True, exist_ok=True )
         if self.items:
@@ -177,11 +179,6 @@ class Level( mmf_util.MmfObject ):
 
         path = f'{self.name}.tscn'        
         levelScene.write( mmf_util.filePath( path ) )
-        if gameScene:
-            gdResource = gameScene.add_ext_resource( f'res://{path}', 'PackedScene' )
-            with gameScene.use_tree() as gameTree:
-                gameTree.root.add_child(
-                    godot_parser.Node( self.name, type="Node",instance=gdResource.id ) )
 
 class Application( mmf_util.MmfObject ):
     
@@ -214,20 +211,7 @@ class Application( mmf_util.MmfObject ):
             levels.append( Level( levelBuf, images, tileSize, tileConvertSize ) )
         return levels
 
-    def writeLevel( self, annotate, levelName ):
+    def writeLevels( self, annotate, levelName=None ):
         for level in self.levels:
-            if level.name == levelName:
-                level.writeLevel( annotate, gameScene=None )
-    
-    def writeApp( self, annotate ):
-        gameScene = godot_parser.GDScene()
-        with gameScene.use_tree() as tree:
-            tree.root = godot_parser.Node( self.name, type="Node" )
-            self.doAnnotate(
-                tree.root,
-                description=f"Original project author: {self.author}",
-                dump=False
-            )
-        for level in self.levels:
-            level.writeLevel( annotate, gameScene )
-        gameScene.write( mmf_util.filePath( f'{self.name}.tscn' ) )
+            if levelName is None or level.name == levelName:
+                level.writeLevel( annotate )

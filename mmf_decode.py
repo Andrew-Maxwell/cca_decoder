@@ -69,7 +69,4 @@ if __name__ == '__main__':
     # Write application out, if applicable
     if args.out:
         writeImageFiles( AGMIs )
-        if level:
-            app.writeLevel( annotate, level )
-        else:
-            app.writeApp( annotate )
+        app.writeLevels( annotate, level )

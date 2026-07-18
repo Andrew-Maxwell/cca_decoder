@@ -56,7 +56,6 @@ class MmfImage( mmf_util.MmfObject ):
         self.buf = self.buf[ :self.tell() ]
         # Set to True if this image is used; to False if included in an atlas
         # Can override and dump all images using --images-all
-        self.writePng = False
         self.levels = set()
 
     def getPixel( self ):
@@ -212,7 +211,7 @@ class TileSet:
             self.tileTexturePositions[ image.id ] = tilePositions
 
     def name( self ):
-        f'{self.levelName}_tiles_{self.tileSize}'
+        return f'{self.levelName}_tiles_{self.tileSize}'
 
     def path( self ):
         return f'{self.levelName}/{mmf_util.IMAGE_SUBDIR}/{self.name()}.png'

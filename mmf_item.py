@@ -123,6 +123,7 @@ class BackdropItem( Item ):
         # Update the image name to something more human-readable (hopefully)
         # Include the original ID to avoid cross-level name collisions
         self.image.name = f'{self.name}-0x{self.image.id:x}'
+        self.image.writePng = True
 
     def writeItem( self, outDir, annotate, levelScene ):
         # Since backdrops are static images, just add an external resource
@@ -168,6 +169,7 @@ class ActiveItem( Item ):
                         f"{anixId:0{mmf_util.DGTS}}_"
                         f"{dirxId:0{mmf_util.DGTS}}_"
                         f"{frameId:0{mmf_util.DGTS}}-0x{image.id:x}" )
+                    image.writePng = True
                     frames.append( image )
 
         # I guess technically the hotspot can vary between frames in an animation
@@ -249,9 +251,14 @@ class Instance( mmf_util.MmfObject ):
         # Also observed last element as e.g. 0
         # assert self.getU( 4 ) == 0xFFFFFFFF
 
-    def canBeTile( self, tileSize ):
-        return ( type( self.item ) == BackdropItem and
-                 self.x % tileSize == 0 and self.y % tileSize == 0 and
+    def canBeTile( self, tileSize, tileConvertSize=None ):
+        if type( self.item ) != BackdropItem:
+            return False
+        if tileConvertSize:
+            if ( self.item.image.height != tileConvertSize or
+                 self.item.image.height != tileConvertSize ):
+                return False
+        return ( self.x % tileSize == 0 and self.y % tileSize == 0 and
                  self.item.image.width % tileSize == 0 and
                  self.item.image.height % tileSize == 0 )
         

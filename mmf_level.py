@@ -12,7 +12,8 @@ class TileMap:
 
     def maybeAddTiles( self, instance ):
         tileSize = self.tileSet.tileSize
-        if not instance.canBeTile( tileSize ):
+        tileConvertSize = self.tileSet.tileConvertSize
+        if not instance.canBeTile( tileSize, tileConvertSize ):
             return False
 
         # Check if any tile which the split image would overlap already has a tile
@@ -73,17 +74,20 @@ class TileMap:
 class Level( mmf_util.MmfObject ):
     header = b'Fram\00{8}v1.5.{8}LFrame'
     
-    def __init__( self, buf, images, tileSize=None ):
+    def __init__( self, buf, images=None, tileSize=None, tileConvertSize=None, skip=False ):
         super().__init__( buf )
         self.go( self.header )
         self.go( b'Tit' )
         self.skip( 24 )
         self.name = mmf_util.safeName( self.bite( mmf_util.END4 ).decode() )
-        print( f"  Parsing level {self.name}" )        
+        print( f"  Found level {self.name}" )
+        if skip:
+            return
+        assert images
         self.items = self.readItems( images )
         self.instances = self.readInstances()
         if tileSize:
-            self.tileSet = self.createTileSet( tileSize )
+            self.tileSet = self.createTileSet( tileSize, tileConvertSize )
             if self.tileSet:
                 self.tileMap = self.createTileMap( self.tileSet )
         else:
@@ -131,13 +135,16 @@ class Level( mmf_util.MmfObject ):
             self.skip( 32 )                
         return instances
 
-    def createTileSet( self, tileSize ):
+    def createTileSet( self, tileSize, tileConvertSize ):
         tiles = set()
         for instance in self.instances:
-            if instance.canBeTile( tileSize ):
+            if instance.canBeTile( tileSize, tileConvertSize ):
                 tiles.add( instance.item.image )
         if tiles:
-            return TileSet( tileSize, tiles, f"{self.name}_tiles_{tileSize}" )
+            return TileSet( tileSize,
+                            tileConvertSize,
+                            tiles,
+                            f"{self.name}_tiles_{tileSize}" )
         return None
 
     def createTileMap( self, tileSet ):
@@ -162,14 +169,20 @@ class Level( mmf_util.MmfObject ):
 
         path = f'{self.name}.tscn'        
         levelScene.write( f'./{outDir}/{path}' )
-        gdResource = gameScene.add_ext_resource( f'res://{path}', 'PackedScene' )
-        with gameScene.use_tree() as gameTree:
-            gameTree.root.add_child(
-                godot_parser.Node( self.name, type="Node",instance=gdResource.id ) )
+        if gameScene:
+            gdResource = gameScene.add_ext_resource( f'res://{path}', 'PackedScene' )
+            with gameScene.use_tree() as gameTree:
+                gameTree.root.add_child(
+                    godot_parser.Node( self.name, type="Node",instance=gdResource.id ) )
 
 class Application( mmf_util.MmfObject ):
     
-    def __init__( self, buf, images, tileSize=None ):
+    def __init__( self,
+                  buf,
+                  images=None,
+                  tileSize=None,
+                  tileConvertSize=None,
+                  onlyLevel=None ):
         super().__init__( buf )
         self.go( b'LApplication' )
         self.go( b'Abou' )
@@ -178,16 +191,26 @@ class Application( mmf_util.MmfObject ):
         self.skip( 16 )
         self.author = self.bite( mmf_util.END4 ).decode()
         print( f"Parsing app {self.name} by {self.author}" )        
-        self.levels = self.readLevels( images, tileSize )
+        self.levels = self.readLevels( images, tileSize, tileConvertSize, onlyLevel )
 
-    def readLevels( self, images, tileSize=None ):
+    def readLevels( self, images, tileSize, tileConvertSize, onlyLevel ):
         levels = []
         # Go to start of first Level.header
         self.seek( self.search( Level.header ) )
         while ( levelBuf := self.bite( Level.header ) ):
-            levels.append( Level( levelBuf, images, tileSize ) )
+            if onlyLevel:
+                # Parse only the title first; if it's not the one we want, skip the whole level
+                tempLevel = Level( levelBuf, skip=True )
+                if tempLevel.name != onlyLevel:
+                    continue
+            levels.append( Level( levelBuf, images, tileSize, tileConvertSize ) )
         return levels
 
+    def writeLevel( self, outDir, annotate, levelName ):
+        for level in self.levels:
+            if level.name == levelName:
+                level.writeLevel( outDir, annotate, gameScene=None )
+    
     def writeApp( self, outDir, annotate ):
         gameScene = godot_parser.GDScene()
         with gameScene.use_tree() as tree:

@@ -54,8 +54,9 @@ class MmfImage( mmf_util.MmfObject ):
         # Now that we know how long the image is, truncate the buffer to only
         # include the binary data for this image.
         self.buf = self.buf[ :self.tell() ]
-        # Set to False if included in an atlas
-        self.writePng = True
+        # Set to True if this image is used; to False if included in an atlas
+        # Can override and dump all images using --images-all
+        self.writePng = False
 
     def getPixel( self ):
         if self.flags == self.FLAG_24BPP:
@@ -140,20 +141,21 @@ def readImages( buf, transparencyColor ):
             agmiBuf = agmiBuf[ image.tell(): ]
     return AGMIs
 
-def writeImageFiles( outDir, AGMIs ):
+def writeImageFiles( outDir, AGMIs, includeAll ):
     if any( AGMIs ):
         imagesPath = f"./{outDir}/{mmf_util.IMAGE_DIR}"
         Path( imagesPath ).mkdir( parents=True, exist_ok=True )
         for AGMI in AGMIs:
             for image in AGMI.values():
-                if image.writePng:
+                if image.writePng or includeAll:
                     image.result.save( f'{imagesPath}/{image.name}.png' )
 
 class TileSet:
 
-    def __init__( self, tileSize, images, name ):
+    def __init__( self, tileSize, tileConvertSize, images, name ):
         self.name = name
         self.tileSize = tileSize
+        self.tileConvertSize = tileConvertSize
         self.tileTexturePositions = {} # imageId : 2d array of tile positions in texture
         self.textureResource = None
         self.subResource = None

@@ -3,7 +3,9 @@ import pdb
 
 END4 = b'\x00\x04' # Often used as string terminator
 _4END = b'\x04\x00' # Sometimes it's reversed?
-IMAGE_DIR = 'sprites'
+IMAGE_UNUSED_DIR = 'extraSprites'
+IMAGE_COMMON_DIR = 'commonSprites'
+IMAGE_SUBDIR = 'sprites'
 ITEM_DIR = 'objects'
 DGTS = 4 # How many digits to include in e.g. id numbers in names
 
@@ -23,6 +25,12 @@ outDir = None
 # Store images globally so we can give them sensible names
 # once we find out which Items refer to them
 images = {}
+
+def filePath( path ):
+    return f'./{outDir}/{path}'
+
+def resourcePath( path ):
+    return f'res://{path}'
 
 class Buffer( bytes ):
 

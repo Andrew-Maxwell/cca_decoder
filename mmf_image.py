@@ -57,6 +57,7 @@ class MmfImage( mmf_util.MmfObject ):
         # Set to True if this image is used; to False if included in an atlas
         # Can override and dump all images using --images-all
         self.writePng = False
+        self.levels = set()
 
     def getPixel( self ):
         if self.flags == self.FLAG_24BPP:
@@ -113,10 +114,22 @@ class MmfImage( mmf_util.MmfObject ):
             for x in range( self.width ):
                 img[ x, y ] = pixels[ y * dataWidth + x ]
 
-    def resourcePath( self ):
-        return f'res://{mmf_util.IMAGE_DIR}/{self.name}.png'
+    def directory( self ):
+        # Relative to the top-level output directory
+        if len( self.levels ) == 0:
+            return mmf_util.IMAGE_UNUSED_DIR
+        elif len( self.levels ) == 1:
+            return f'{ next( iter( self.levels ) ) }/{mmf_util.IMAGE_SUBDIR}'
+        else:
+            return mmf_util.IMAGE_COMMON_DIR
 
-    def writeImage( self, outDir, annotate, scene ):
+    def filePath( self ):
+        return mmf_util.filePath( f'{self.directory()}/{self.name}.png' )
+        
+    def resourcePath( self ):
+        return mmf_util.resourcePath( f'{self.directory()}/{self.name}.png' )
+
+    def addImageResource( self, scene ):
         # gdResource is not object-scoped since the same image may be referred
         # in multiple scenes.
         return scene.add_ext_resource( self.resourcePath(), "Texture" )
@@ -141,19 +154,18 @@ def readImages( buf, transparencyColor ):
             agmiBuf = agmiBuf[ image.tell(): ]
     return AGMIs
 
-def writeImageFiles( outDir, AGMIs, includeAll ):
+def writeImageFiles( AGMIs ):
     if any( AGMIs ):
-        imagesPath = f"./{outDir}/{mmf_util.IMAGE_DIR}"
-        Path( imagesPath ).mkdir( parents=True, exist_ok=True )
         for AGMI in AGMIs:
             for image in AGMI.values():
-                if image.writePng or includeAll:
-                    image.result.save( f'{imagesPath}/{image.name}.png' )
+                filePath = mmf_util.filePath( image.directory() )
+                Path( filePath ).mkdir( parents=True, exist_ok=True )
+                image.result.save( image.filePath() )
 
 class TileSet:
 
-    def __init__( self, tileSize, tileConvertSize, images, name ):
-        self.name = name
+    def __init__( self, tileSize, tileConvertSize, images, levelName ):
+        self.levelName = levelName
         self.tileSize = tileSize
         self.tileConvertSize = tileConvertSize
         self.tileTexturePositions = {} # imageId : 2d array of tile positions in texture
@@ -195,15 +207,18 @@ class TileSet:
                 tilePositions.append( tilePositionsRow )
             self.tileTexturePositions[ image.id ] = tilePositions
 
-    def texturePath( self ):
-        return f"{mmf_util.IMAGE_DIR}/{self.name}.png"
-    
-    def writeTexture( self, outDir ):
-        self.texture.save( f'./{outDir}/{self.texturePath()}' )
+    def name( self ):
+        f'{self.levelName}_tiles_{self.tileSize}'
+
+    def path( self ):
+        return f'{self.levelName}/{mmf_util.IMAGE_SUBDIR}/{self.name()}.png'
+
+    def writeTexture( self ):
+        self.texture.save( mmf_util.filePath( self.path() ) )
 
     def writeTileSet( self, levelScene ):
-        self.textureResource = \
-            levelScene.add_ext_resource( f'res://{self.texturePath()}', 'Texture' )
+        self.textureResource = levelScene.add_ext_resource(
+            mmf_util.resourcePath( self.path() ), 'Texture' )
         self.subResource = levelScene.add_sub_resource( "TileSet" )
         self.subResource[ "0/name" ] = f"{self.name}_0"
         self.subResource[ "0/texture" ] = self.textureResource.reference

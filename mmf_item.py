@@ -66,7 +66,7 @@ class ItemTag( mmf_util.MmfObject ):
 class Item( mmf_util.MmfObject ):
     ignored = False
 
-    def __init__( self, buf ):
+    def __init__( self, buf, levelName ):
         super().__init__( buf )
         assert self.read( 4 ) == b'v1.5'
         tagCount = self.getU( 4 )
@@ -85,7 +85,8 @@ class Item( mmf_util.MmfObject ):
         self.go( self.idKey )
         self.id = self.getU( 4 )
         print( f"      name {self.name} id {self.id}" )
-        self.gdResource = None        
+        self.gdResource = None
+        self.levelName = levelName
 
     def getName( self ):
         try:
@@ -112,8 +113,8 @@ class BackdropItem( Item ):
     header = b'LBackdropItem'
     idKey = b'SBOs'
 
-    def __init__( self, buf, images ):
-        super().__init__( buf )
+    def __init__( self, buf, levelName, images ):
+        super().__init__( buf, levelName )
 
         # Get the image ID
         self.seek( 0 )
@@ -123,19 +124,17 @@ class BackdropItem( Item ):
         # Update the image name to something more human-readable (hopefully)
         # Include the original ID to avoid cross-level name collisions
         self.image.name = f'{self.name}-0x{self.image.id:x}'
-        self.image.writePng = True
+        self.image.levels.add( self.levelName )
 
-    def writeItem( self, outDir, annotate, levelScene ):
-        # Since backdrops are static images, just add an external resource
-        # Can't actually annotate because ext resources can't have descriptions
-        self.gdResource = self.image.writeImage( outDir, annotate, levelScene )
+    def addItemResource( self, levelScene ):
+        self.gdResource = self.image.addImageResource( levelScene )
 
 class ActiveItem( Item ):
     header = b'LActiveItem'
     idKey = b'LFFs'
 
-    def __init__( self, buf, images ):
-        super().__init__( buf )
+    def __init__( self, buf, levelName, images ):
+        super().__init__( buf, levelName )
         self.animations = self.loadAnimations( images )
 
     def loadAnimations( self, images ):
@@ -169,7 +168,7 @@ class ActiveItem( Item ):
                         f"{anixId:0{mmf_util.DGTS}}_"
                         f"{dirxId:0{mmf_util.DGTS}}_"
                         f"{frameId:0{mmf_util.DGTS}}-0x{image.id:x}" )
-                    image.writePng = True
+                    image.levels.add( self.levelName )
                     frames.append( image )
 
         # I guess technically the hotspot can vary between frames in an animation
@@ -177,7 +176,10 @@ class ActiveItem( Item ):
         self.origin = ( image.hotspotX, image.hotspotY )
         return animations
 
-    def writeItem( self, outDir, annotate, levelScene ):
+    def path( self ):
+        return  f'{self.levelName}/{mmf_util.ITEM_DIR}/{self.name}-{self.id}.tscn'
+    
+    def writeActiveItem( self, annotate ):
         # ActiveItems can have lots of animation frames, so give them their own scene
         gdItemScene = godot_parser.GDScene()
         gdAnimations = []
@@ -186,7 +188,7 @@ class ActiveItem( Item ):
             for mmfDirId, mmfDirection in enumerate( mmfAnimation ):
                 frameRefs = []
                 for image in mmfDirection:
-                    frameResource = image.writeImage( outDir, annotate, gdItemScene )
+                    frameResource = image.addImageResource( gdItemScene )
                     frameRefs.append( frameResource.reference )
                 gdAnimations.append( {
                     'loop': True,
@@ -229,9 +231,11 @@ class ActiveItem( Item ):
                         for image in dirx:
                             image.doAnnotate( node )
             itemTree.root.add_child( node )
-        path = f'{mmf_util.ITEM_DIR}/{self.name}-{self.id}.tscn'
-        gdItemScene.write( f'./{outDir}/{path}' )
-        self.gdResource = levelScene.add_ext_resource( f'res://{path}', 'PackedScene' )
+        gdItemScene.write( mmf_util.filePath( self.path() ) )
+
+    def addItemResource( self, levelScene ):
+        self.gdResource = levelScene.add_ext_resource(
+            mmf_util.resourcePath( self.path() ), 'PackedScene' )
     
 class Instance( mmf_util.MmfObject ):
 
@@ -263,7 +267,7 @@ class Instance( mmf_util.MmfObject ):
                  self.item.image.height % tileSize == 0 )
         
     # NOTE: writeInstance takes a Node instead of the usual Scene
-    def writeInstance( self, outDir, annotate, levelRoot ):
+    def addInstanceToLevel( self, annotate, levelRoot ):
         if not self.item:
             return
         gdPosition = godot_parser.Vector2( self.x, self.y )

@@ -53,7 +53,7 @@ if __name__ == '__main__':
     level = args.level if args.level else None    
     levelTitlesOnly = args.list_levels
     allImages = args.images_all
-    outDir = args.out if args.out and not levelTitlesOnly else None
+    mmf_util.outDir = args.out if args.out and not levelTitlesOnly else None
 
     if levelTitlesOnly:
         Application( buf, onlyLevel="nolevelnamewillevermatchthishyperspecificstring" )
@@ -66,12 +66,10 @@ if __name__ == '__main__':
     # Parse application
     app = Application( buf, AGMIs[ 1 ], tileSize, tileConvertSize, level )
 
-    if outDir:
-        writeImageFiles( outDir, AGMIs, allImages )
-        
-        if any( l.items for l in app.levels ):
-            Path( f"./{outDir}/{mmf_util.ITEM_DIR}" ).mkdir( exist_ok=True )
+    # Write application out, if applicable
+    if args.out:
+        writeImageFiles( AGMIs )
         if level:
-            app.writeLevel( outDir, annotate, level )
+            app.writeLevel( annotate, level )
         else:
-            app.writeApp( outDir, annotate )
+            app.writeApp( annotate )

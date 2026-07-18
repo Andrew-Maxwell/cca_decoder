@@ -2,6 +2,7 @@ import godot_parser
 from mmf_item import ActiveItem, BackdropItem, Instance
 import mmf_util
 from mmf_image import TileSet
+from pathlib import Path
 import re
 
 class TileMap:
@@ -106,10 +107,10 @@ class Level( mmf_util.MmfObject ):
         while ( itemBuf := self.bite( itemHeaderRegex ) ):
             headerType = re.match( itemHeaderRegex, itemBuf ).group( 1 )
             if headerType == BackdropItem.header:
-                item = BackdropItem( itemBuf, images )
+                item = BackdropItem( itemBuf, self.name, images )
                 items[ item.id ] = item                
             elif headerType == ActiveItem.header:
-                item = ActiveItem( itemBuf, images )
+                item = ActiveItem( itemBuf, self.name, images )
                 items[ item.id ] = item                
             else:
                 print( f"***WARNING:*** Skipping item of type {headerType}" )
@@ -144,7 +145,7 @@ class Level( mmf_util.MmfObject ):
             return TileSet( tileSize,
                             tileConvertSize,
                             tiles,
-                            f"{self.name}_tiles_{tileSize}" )
+                            self.name )
         return None
 
     def createTileMap( self, tileSet ):
@@ -153,22 +154,29 @@ class Level( mmf_util.MmfObject ):
         self.instances = [ i for i in self.instances if not tileMap.maybeAddTiles( i ) ]
         return tileMap
     
-    def writeLevel( self, outDir, annotate, gameScene ):
+    def writeLevel( self, annotate, gameScene ):
+        levelPath = mmf_util.filePath( mmf_util.safeName( self.name ) )
+        Path( levelPath ).mkdir( parents=True, exist_ok=True )
+        if self.items:
+            itemPath = f'{levelPath}/{mmf_util.ITEM_DIR}'
+            Path( itemPath ).mkdir( exist_ok=True )
         levelScene = godot_parser.GDScene()
         with levelScene.use_tree() as levelTree:
             levelTree.root = godot_parser.Node( self.name, type="Node" )
             for item in self.items.values():
-                item.writeItem( outDir, annotate, levelScene )
+                if isinstance( item, ActiveItem ):
+                    item.writeActiveItem( annotate )
+                item.addItemResource( levelScene )
             for instance in self.instances:
-                instance.writeInstance( outDir, annotate, levelTree.root )
+                instance.addInstanceToLevel( annotate, levelTree.root )
 
         if self.tileSet and self.tileMap:
-            self.tileSet.writeTexture( outDir )
+            self.tileSet.writeTexture()
             self.tileSet.writeTileSet( levelScene )
             self.tileMap.writeTileMap( levelScene )
 
         path = f'{self.name}.tscn'        
-        levelScene.write( f'./{outDir}/{path}' )
+        levelScene.write( mmf_util.filePath( path ) )
         if gameScene:
             gdResource = gameScene.add_ext_resource( f'res://{path}', 'PackedScene' )
             with gameScene.use_tree() as gameTree:
@@ -206,12 +214,12 @@ class Application( mmf_util.MmfObject ):
             levels.append( Level( levelBuf, images, tileSize, tileConvertSize ) )
         return levels
 
-    def writeLevel( self, outDir, annotate, levelName ):
+    def writeLevel( self, annotate, levelName ):
         for level in self.levels:
             if level.name == levelName:
-                level.writeLevel( outDir, annotate, gameScene=None )
+                level.writeLevel( annotate, gameScene=None )
     
-    def writeApp( self, outDir, annotate ):
+    def writeApp( self, annotate ):
         gameScene = godot_parser.GDScene()
         with gameScene.use_tree() as tree:
             tree.root = godot_parser.Node( self.name, type="Node" )
@@ -221,5 +229,5 @@ class Application( mmf_util.MmfObject ):
                 dump=False
             )
         for level in self.levels:
-            level.writeLevel( outDir, annotate, gameScene )
-        gameScene.write( f'./{outDir}/{self.name}.tscn' )
+            level.writeLevel( annotate, gameScene )
+        gameScene.write( mmf_util.filePath( f'{self.name}.tscn' ) )

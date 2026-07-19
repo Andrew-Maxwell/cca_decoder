@@ -2,6 +2,7 @@ import godot_parser
 import cca_image
 import cca_util
 
+from pathlib import Path
 import pdb
 from PIL import Image
 
@@ -128,7 +129,8 @@ class BackdropItem( Item ):
         self.image.levels.add( self.levelName )
 
     def addItemResource( self, levelScene ):
-        self.gdResource = self.image.addImageResource( levelScene )
+        if self.image.refCount > 0:
+            self.gdResource = self.image.addImageResource( levelScene )
 
 class ActiveItem( Item ):
     header = b'LActiveItem'
@@ -172,6 +174,7 @@ class ActiveItem( Item ):
                         f"{frameId:0{cca_util.DGTS}}-0x{image.id:x}" )
                     image.levels.add( self.levelName )
                     frames.append( image )
+                    image.refCount += 1
         return animations
 
     def generateSpriteSheet( self, animations ):
@@ -212,6 +215,7 @@ class ActiveItem( Item ):
                                frame.hotspotY - self.origin[ 1 ] )
                     dst = ( tilePos[ 0 ] + offset[ 0 ], tilePos[ 1 ] + offset[ 1 ] )
                     texture.paste( frame.result, dst )
+                    frame.refCount -= 1
                 sequenceId += 1
         return spriteSize, texture
                     
@@ -222,6 +226,9 @@ class ActiveItem( Item ):
         return  f'{self.levelName}/{cca_util.ITEM_DIR}/{self.name}-{self.id}.tscn'
 
     def writeTexture( self ):
+        spriteDirectory = \
+            cca_util.filePath( f'{self.levelName}/{cca_util.IMAGE_SUBDIR}' )
+        Path( spriteDirectory ).mkdir( parents=True, exist_ok=True )
         self.texture.save( cca_util.filePath( self.texturePath() ) )        
         
     def writeActiveItem( self, annotate ):
@@ -290,6 +297,7 @@ class ActiveItem( Item ):
                             image.doAnnotate( node )
             itemTree.root.add_child( node )
         gdItemScene.write( cca_util.filePath( self.path() ) )
+        self.writeTexture()
 
     def addItemResource( self, levelScene ):
         self.gdResource = levelScene.add_ext_resource(
@@ -306,8 +314,9 @@ class Instance( cca_util.MmfObject ):
         self.unknown1 = self.getU( 4 )
         self.unknown2 = self.getU( 4 )
         self.item = items.get( self.getU( 4 ), None )
-        if type( self.item ) == BackdropItem:
+        if isinstance( self.item, BackdropItem ):
             self.zIndex = cca_util.BACKDROP_Z_INDEX
+            self.item.image.refCount += 1
         else:
             self.zIndex = cca_util.ACTIVE_Z_INDEX
         # Also observed last element as e.g. 0
@@ -323,8 +332,7 @@ class Instance( cca_util.MmfObject ):
         return ( self.x % tileSize == 0 and self.y % tileSize == 0 and
                  self.item.image.width % tileSize == 0 and
                  self.item.image.height % tileSize == 0 )
-        
-    # NOTE: writeInstance takes a Node instead of the usual Scene
+
     def addInstanceToLevel( self, annotate, levelRoot ):
         if not self.item:
             return

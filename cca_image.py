@@ -54,9 +54,8 @@ class MmfImage( cca_util.MmfObject ):
         # Now that we know how long the image is, truncate the buffer to only
         # include the binary data for this image.
         self.buf = self.buf[ :self.tell() ]
-        # Set to True if this image is used; to False if included in an atlas
-        # Can override and dump all images using --images-all
         self.levels = set()
+        self.refCount = 0
 
     def getPixel( self ):
         if self.flags == self.FLAG_24BPP:
@@ -157,9 +156,11 @@ def writeImageFiles( AGMIs ):
     if any( AGMIs ):
         for AGMI in AGMIs:
             for image in AGMI.values():
-                filePath = cca_util.filePath( image.directory() )
-                Path( filePath ).mkdir( parents=True, exist_ok=True )
-                image.result.save( image.filePath() )
+                if image.refCount > 0:
+                    filePath = cca_util.filePath( image.directory() )
+                    Path( filePath ).mkdir( parents=True, exist_ok=True )
+                    image.result.save( image.filePath() )
+
 
 class TileSet:
 

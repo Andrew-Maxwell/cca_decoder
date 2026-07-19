@@ -153,7 +153,13 @@ class Level( cca_util.MmfObject ):
     def createTileMap( self, tileSet ):
         tileMap = TileMap( tileSet )
         # Filter out instances that get added to the tileMap
-        self.instances = [ i for i in self.instances if not tileMap.maybeAddTiles( i ) ]
+        nonTileInstances = []
+        for instance in self.instances:
+            if tileMap.maybeAddTiles( instance ):
+                instance.item.image.refCount -= 1
+            else:
+                nonTileInstances.append( instance )
+        self.instances = nonTileInstances
         return tileMap
     
     def writeLevel( self, annotate ):

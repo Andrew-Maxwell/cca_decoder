@@ -79,11 +79,11 @@ class MmfImage( cca_util.MmfObject ):
         def addPixel( pixel, count=1 ):
             for _ in range( count ):
                 if self.x == self.width:
-                    trace( "Skipping null terminator" )
+                    cca_util.trace( "Skipping null terminator" )
                     self.x = 0
                     self.y += 1
                 else:
-                    trace( self.x, self.y, '=', pixel )
+                    cca_util.trace( self.x, self.y, '=', pixel )
                     pixels[ self.x, self.y ] = pixel
                     self.x += 1
 
@@ -99,7 +99,7 @@ class MmfImage( cca_util.MmfObject ):
                 pixels.extend( [ self.getPixel() ] * runLength )
 
         if self.tell() != rleStart + self.rleLength:
-            print( "image length mismatch: ", f.tell(), rleStart, rleLength )
+            cca_util.warn( "image length mismatch: ", f.tell(), rleStart, rleLength )
 
         assert ( len( pixels ) == self.width * self.height or
                  len( pixels ) == ( self.width + 1 ) * self.height )
@@ -117,9 +117,16 @@ class MmfImage( cca_util.MmfObject ):
         if len( self.levels ) == 0:
             return cca_util.IMAGE_UNUSED_DIR
         elif len( self.levels ) == 1:
-            return f'{ next( iter( self.levels ) ) }/{cca_util.IMAGE_SUBDIR}'
+            level = next( iter( self.levels ) )
+            if self.refCount > 0:
+                return f'{level}/{cca_util.IMAGE_SUBDIR}'
+            else:
+                return f'{level}/{cca_util.IMAGE_UNUSED_DIR}'
         else:
-            return cca_util.IMAGE_COMMON_DIR
+            if self.refCount > 0:
+                return cca_util.IMAGE_COMMON_DIR
+            else:
+                return cca_util.IMAGE_UNUSED_DIR
 
     def filePath( self ):
         return cca_util.filePath( f'{self.directory()}/{self.name}.png' )
@@ -147,7 +154,8 @@ def readImages( buf, transparencyColor ):
             # Note: We don't know how long an image is until we parse it.
             # So just slice off each image from the start of the buffer as we find them.
             image = MmfImage( agmiBuf, header, agmiID, transparencyColor )
-            print( f'  found image: {image.width}x{image.height} {image.name} at 0x{agmiBuf.baseOffset:x}' )
+            cca_util.trace( f'  found image: {image.width}x{image.height}'
+                            f'{image.name} at 0x{agmiBuf.baseOffset:x}' )
             AGMIs[ agmiID ][ image.id ] = image
             agmiBuf = agmiBuf[ image.tell(): ]
     return AGMIs
@@ -156,10 +164,9 @@ def writeImageFiles( AGMIs ):
     if any( AGMIs ):
         for AGMI in AGMIs:
             for image in AGMI.values():
-                if image.refCount > 0:
-                    filePath = cca_util.filePath( image.directory() )
-                    Path( filePath ).mkdir( parents=True, exist_ok=True )
-                    image.result.save( image.filePath() )
+                filePath = cca_util.filePath( image.directory() )
+                Path( filePath ).mkdir( parents=True, exist_ok=True )
+                image.result.save( image.filePath() )
 
 
 class TileSet:
@@ -185,7 +192,7 @@ class TileSet:
         self.width = ceil( maxTiles ** 0.5 ) # in tiles
         textureSize = self.width * tileSize
         if textureSize > 2048:
-            print( f"***WARNING***: TileSet size {textureSize} > 2048" )
+            cca_util.warn( f"TileSet size {textureSize} > 2048" )
         tileIdx = 0
         self.texture = Image.new( "RGBA", ( textureSize, textureSize ), color=(0, 0, 0, 0) )
 

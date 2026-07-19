@@ -74,8 +74,7 @@ class Item( cca_util.MmfObject ):
         tagCount = self.getU( 4 )
         class2Len = self.getU( 4 )
         self.class2 = self.read( class2Len ).decode()
-        print( f"    Found {self.class2} @0x{self.buf.baseOffset:x}", end="" )
-        cca_util.trace( "" )
+        cca_util.trace( f"    Found {self.class2} @0x{self.buf.baseOffset:x}" )
         self.tags = {}
         delimiter = cca_util._4END + b'[a-zA-Z]{4}'
         for _ in range( tagCount ):
@@ -86,7 +85,7 @@ class Item( cca_util.MmfObject ):
         self.name = self.getName()
         self.go( self.idKey )
         self.id = self.getU( 4 )
-        print( f"      name {self.name} id {self.id}" )
+        cca_util.trace( f"      name {self.name} id {self.id}" )
         self.gdResource = None
         self.levelName = levelName
 
@@ -179,9 +178,15 @@ class ActiveItem( Item ):
 
     def generateSpriteSheet( self, animations ):
         # Determine size of each tile in the spritesheet
-        # Some sprites may be smaller than others and use the hotspot to compensate
-        minHotspotX = minHotspotY = float( 'inf' )
-        # Maximum of hotspot + image size
+        # Each sprite contains a separate "hotspot" which represent the origin of the image
+        # To align different frames in an animation, we need to offset the sprites according
+        # to their individual hotspot
+        # Then, all sprites will be offset based on the shared origin in Godot
+        
+        # Use the maximum hotspot as the origin of the image and offset other frames
+        # from it (greatest hotspot -> smallest extent, other images extend furtehr)
+        maxHotspotX = maxHotspotY = float( '-inf' )
+        # Max extent of images beyond its hotspot
         maxExtentX = maxExtentY = 0
         maxFrames = 0
         sequenceCount = 0
@@ -190,18 +195,18 @@ class ActiveItem( Item ):
                 sequenceCount += 1
                 maxFrames = max( maxFrames, len( dirx ) )
                 for image in dirx:
-                    minHotspotX = min( minHotspotX, image.hotspotX )
-                    minHotspotY = min( minHotspotY, image.hotspotY )
-                    maxExtentX = max( maxExtentX, image.hotspotX + image.width )
-                    maxExtentY = max( maxExtentY, image.hotspotY + image.height )
-        # (x, y) since these are PIL image coordinates, not Godot
-        self.origin = ( minHotspotX, minHotspotY )
-        spriteSize = ( maxExtentX - minHotspotX, maxExtentY - minHotspotY )
+                    maxHotspotX = max( maxHotspotX, image.hotspotX )
+                    maxHotspotY = max( maxHotspotY, image.hotspotY )
+                    maxExtentX = max( maxExtentX, image.width - image.hotspotX )
+                    maxExtentY = max( maxExtentY, image.height - image.hotspotY )
+        # (x, y) since these are PIL image coordinates
+        self.origin = ( maxHotspotX, maxHotspotY )
+        spriteSize = ( maxHotspotX + maxExtentX, maxHotspotY + maxExtentY )
         texSize = ( spriteSize[ 0 ] * maxFrames, spriteSize[ 1 ] * sequenceCount )
         if ( texSize[ 0 ] > cca_util.IMAGE_WARN_SIZE or
              texSize[ 1 ] > cca_util.IMAGE_WARN_SIZE ):
-            printf( f'***WARNING***: item {self.name} spritesheet size {texSize} > '
-                    f'{cca_util.IMAGE_WARN_SIZE}' )
+            cca_util.warn( f'item {self.name} spritesheet size {texSize} > '
+                           f'{cca_util.IMAGE_WARN_SIZE}' )
         
         texture = Image.new( "RGBA", texSize, color=( 0, 0, 0, 0 ) )
 
@@ -209,10 +214,14 @@ class ActiveItem( Item ):
         for anix in animations:
             for dirx in anix:
                 for frameId, frame in enumerate( dirx ):
+                    # Paste each sprite such that its hotspot is at the position of
+                    # the origin within its tile
                     tilePos = ( frameId * spriteSize[ 0 ],
                                 sequenceId * spriteSize[ 1 ] )
-                    offset = ( frame.hotspotX - self.origin[ 0 ],
-                               frame.hotspotY - self.origin[ 1 ] )
+                    # Subtract relative hotspot position; e.g. if the hotspot for this
+                    # image is further right, then the image should be pasted further left                    
+                    offset = ( self.origin[ 0 ] - frame.hotspotX,
+                               self.origin[ 1 ] - frame.hotspotY )
                     dst = ( tilePos[ 0 ] + offset[ 0 ], tilePos[ 1 ] + offset[ 1 ] )
                     texture.paste( frame.result, dst )
                     frame.refCount -= 1
@@ -220,7 +229,7 @@ class ActiveItem( Item ):
         return spriteSize, texture
                     
     def texturePath( self ):
-        return f'{self.levelName}/{cca_util.IMAGE_SUBDIR}/{self.name}.png'        
+        return f'{self.levelName}/{cca_util.IMAGE_SUBDIR}/{self.name}-{self.id}.png'
     
     def path( self ):
         return  f'{self.levelName}/{cca_util.ITEM_DIR}/{self.name}-{self.id}.tscn'

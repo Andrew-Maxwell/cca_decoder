@@ -103,6 +103,9 @@ class Level( cca_util.MmfObject ):
         self.go( b'class cHandleItemList<class LFrameItem>' )
         expectedItems = self.getU( 4 )
         itemHeaderRegex = b'v1\\.5.{8}(L\\w{4,12}Item)'
+
+        skippedItems = 0
+        skippedTypes = set()
         
         # Go to start of first itemHeader
         self.seek( self.search( itemHeaderRegex ) )
@@ -115,9 +118,14 @@ class Level( cca_util.MmfObject ):
                 item = ActiveItem( itemBuf, self.name, images )
                 items[ item.id ] = item                
             else:
-                print( f"***WARNING:*** Skipping item of type {headerType}" )
-        if len( items ) != expectedItems:
-            print( "***WARNING:*** Did not get the expected number of items." )
+                cca_util.trace( f"Skipping item of type {headerType.decode()}" )
+                skippedItems += 1
+                skippedTypes.add( headerType.decode() )
+        if skippedItems:
+            cca_util.warn( f"Skipped {skippedItems} unsupported items with "
+                           f"types {list( skippedTypes )}" )
+        if len( items ) + skippedItems != expectedItems:
+            cca_util.warn( "Did not get the expected number of items." )
         return items
 
     def readInstances( self ):

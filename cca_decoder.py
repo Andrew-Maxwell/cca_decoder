@@ -70,3 +70,5 @@ if __name__ == '__main__':
     if args.out:
         writeImageFiles( AGMIs )
         app.writeLevels( annotate, level )
+
+    print( "Okay, I think that worked." )

@@ -3,17 +3,17 @@ import pdb
 
 END4 = b'\x00\x04' # Often used as string terminator
 _4END = b'\x04\x00' # Sometimes it's reversed?
-IMAGE_UNUSED_DIR = 'extraSprites'
+IMAGE_UNUSED_DIR = 'unusedSprites'
 IMAGE_COMMON_DIR = 'commonSprites'
 IMAGE_SUBDIR = 'sprites'
 IMAGE_WARN_SIZE = 2048
 ITEM_DIR = 'objects'
 DGTS = 4 # How many digits to include in e.g. id numbers in names
 
-BACKGROUND_Z_INDEX = -300
-BACKDROP_Z_INDEX = -200
-TILE_Z_INDEX = -100
-ACTIVE_Z_INDEX = 0
+BACKGROUND_Z_INDEX = -200
+BACKDROP_Z_INDEX = -100
+TILE_Z_INDEX = 0
+ACTIVE_Z_INDEX = 100
 
 debug = False
 annotate = False
@@ -21,6 +21,9 @@ binAnnotate = False
 def trace( t ):
     if debug:
         print( t )
+
+def warn( w ):
+    print( f'***WARNING***: {w}' )
 
 outDir = None
 # Store images globally so we can give them sensible names

@@ -1,12 +1,12 @@
 import godot_parser
-import mmf_util
+import cca_util
 from PIL import Image
 from pathlib import Path
 from math import ceil
 
 import pdb
 
-class AgmiHeader( mmf_util.MmfObject ):
+class AgmiHeader( cca_util.MmfObject ):
     def __init__( self, buf ):
         super().__init__( buf )
         self.agmiTag = self.read( 4 )
@@ -25,7 +25,7 @@ class AgmiHeader( mmf_util.MmfObject ):
         assert null == 0
         return ( r, g, b, 255 )
 
-class MmfImage( mmf_util.MmfObject ):
+class MmfImage( cca_util.MmfObject ):
     FLAG_24BPP = 0x0404
     FLAG_16BPP = 0x0206
     FLAG_8_BIT_INDEX = 0x0103
@@ -116,17 +116,17 @@ class MmfImage( mmf_util.MmfObject ):
     def directory( self ):
         # Relative to the top-level output directory
         if len( self.levels ) == 0:
-            return mmf_util.IMAGE_UNUSED_DIR
+            return cca_util.IMAGE_UNUSED_DIR
         elif len( self.levels ) == 1:
-            return f'{ next( iter( self.levels ) ) }/{mmf_util.IMAGE_SUBDIR}'
+            return f'{ next( iter( self.levels ) ) }/{cca_util.IMAGE_SUBDIR}'
         else:
-            return mmf_util.IMAGE_COMMON_DIR
+            return cca_util.IMAGE_COMMON_DIR
 
     def filePath( self ):
-        return mmf_util.filePath( f'{self.directory()}/{self.name}.png' )
+        return cca_util.filePath( f'{self.directory()}/{self.name}.png' )
         
     def resourcePath( self ):
-        return mmf_util.resourcePath( f'{self.directory()}/{self.name}.png' )
+        return cca_util.resourcePath( f'{self.directory()}/{self.name}.png' )
 
     def addImageResource( self, scene ):
         # gdResource is not object-scoped since the same image may be referred
@@ -134,7 +134,7 @@ class MmfImage( mmf_util.MmfObject ):
         return scene.add_ext_resource( self.resourcePath(), "Texture" )
 
 def readImages( buf, transparencyColor ):
-    AGMIOffsets = mmf_util.findOffsets( buf, b'AGMI' )
+    AGMIOffsets = cca_util.findOffsets( buf, b'AGMI' )
     print( f"Found AGMIs: { [ f"{AGMI:x}" for AGMI in AGMIOffsets ] }" )
 
     AGMIs = []
@@ -157,7 +157,7 @@ def writeImageFiles( AGMIs ):
     if any( AGMIs ):
         for AGMI in AGMIs:
             for image in AGMI.values():
-                filePath = mmf_util.filePath( image.directory() )
+                filePath = cca_util.filePath( image.directory() )
                 Path( filePath ).mkdir( parents=True, exist_ok=True )
                 image.result.save( image.filePath() )
 
@@ -214,14 +214,14 @@ class TileSet:
         return f'{self.levelName}_tiles_{self.tileSize}'
 
     def path( self ):
-        return f'{self.levelName}/{mmf_util.IMAGE_SUBDIR}/{self.name()}.png'
+        return f'{self.levelName}/{cca_util.IMAGE_SUBDIR}/{self.name()}.png'
 
     def writeTexture( self ):
-        self.texture.save( mmf_util.filePath( self.path() ) )
+        self.texture.save( cca_util.filePath( self.path() ) )
 
     def writeTileSet( self, levelScene ):
         self.textureResource = levelScene.add_ext_resource(
-            mmf_util.resourcePath( self.path() ), 'Texture' )
+            cca_util.resourcePath( self.path() ), 'Texture' )
         self.subResource = levelScene.add_sub_resource( "TileSet" )
         self.subResource[ "0/name" ] = f"{self.name}_0"
         self.subResource[ "0/texture" ] = self.textureResource.reference

@@ -1,7 +1,7 @@
 import godot_parser
-from mmf_item import ActiveItem, BackdropItem, Instance
-import mmf_util
-from mmf_image import TileSet
+from cca_item import ActiveItem, BackdropItem, Instance
+import cca_util
+from cca_image import TileSet
 from pathlib import Path
 import re
 
@@ -62,7 +62,7 @@ class TileMap:
             self.tileSet.name(),
             type='TileMap',
             properties={
-                'z_index': mmf_util.TILE_Z_INDEX,
+                'z_index': cca_util.TILE_Z_INDEX,
                 'tile_set': self.tileSet.subResource.reference,
                 'cell_size': godot_parser.Vector2( tileSize, tileSize ),
                 'cell_custom_transform': gdTransform,
@@ -74,7 +74,7 @@ class TileMap:
         with levelScene.use_tree() as levelTree:
             levelTree.root.add_child( tileMapNode )        
 
-class Level( mmf_util.MmfObject ):
+class Level( cca_util.MmfObject ):
     header = b'Fram\00{8}v1.5.{8}LFrame'
     
     def __init__( self, buf, images=None, tileSize=None, tileConvertSize=None, skip=False ):
@@ -82,7 +82,7 @@ class Level( mmf_util.MmfObject ):
         self.go( self.header )
         self.go( b'Tit' )
         self.skip( 24 )
-        self.name = mmf_util.safeName( self.bite( mmf_util.END4 ).decode() )
+        self.name = cca_util.safeName( self.bite( cca_util.END4 ).decode() )
         print( f"  Found level {self.name}" )
         if skip:
             return
@@ -130,11 +130,11 @@ class Level( mmf_util.MmfObject ):
             if self.buf[ self.offset : self.offset + 4 ] == b'Inst':
                 instance = Instance(
                     self.buf[ self.offset : self.offset + 32 ], self.items )
-                mmf_util.trace( f"    Found instance {instance.id}" )
+                cca_util.trace( f"    Found instance {instance.id}" )
                 if instance.item:
                     instances.append( instance )
                 else:
-                    mmf_util.trace( f"      Skipping; no valid item" )
+                    cca_util.trace( f"      Skipping; no valid item" )
             self.skip( 32 )                
         return instances
 
@@ -157,10 +157,10 @@ class Level( mmf_util.MmfObject ):
         return tileMap
     
     def writeLevel( self, annotate ):
-        levelPath = mmf_util.filePath( self.name )
+        levelPath = cca_util.filePath( self.name )
         Path( levelPath ).mkdir( parents=True, exist_ok=True )
         if self.items:
-            itemPath = f'{levelPath}/{mmf_util.ITEM_DIR}'
+            itemPath = f'{levelPath}/{cca_util.ITEM_DIR}'
             Path( itemPath ).mkdir( exist_ok=True )
         levelScene = godot_parser.GDScene()
         with levelScene.use_tree() as levelTree:
@@ -179,7 +179,7 @@ class Level( mmf_util.MmfObject ):
 
         levelScene.write( f'{levelPath}/{self.name}.tscn' )
 
-class Application( mmf_util.MmfObject ):
+class Application( cca_util.MmfObject ):
     
     def __init__( self,
                   buf,
@@ -191,9 +191,9 @@ class Application( mmf_util.MmfObject ):
         self.go( b'LApplication' )
         self.go( b'Abou' )
         self.skip( 24 )
-        self.name = mmf_util.safeName( self.bite( mmf_util.END4 ).decode() )
+        self.name = cca_util.safeName( self.bite( cca_util.END4 ).decode() )
         self.skip( 16 )
-        self.author = self.bite( mmf_util.END4 ).decode()
+        self.author = self.bite( cca_util.END4 ).decode()
         print( f"Parsing app {self.name} by {self.author}" )        
         self.levels = self.readLevels( images, tileSize, tileConvertSize, onlyLevel )
 

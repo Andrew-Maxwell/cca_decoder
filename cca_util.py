@@ -6,6 +6,7 @@ _4END = b'\x04\x00' # Sometimes it's reversed?
 IMAGE_UNUSED_DIR = 'extraSprites'
 IMAGE_COMMON_DIR = 'commonSprites'
 IMAGE_SUBDIR = 'sprites'
+IMAGE_WARN_SIZE = 2048
 ITEM_DIR = 'objects'
 DGTS = 4 # How many digits to include in e.g. id numbers in names
 

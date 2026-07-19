@@ -2,9 +2,9 @@
 
 import argparse
 from pathlib import Path
-import mmf_util
-from mmf_image import readImages, writeImageFiles
-from mmf_level import Level, Application
+import cca_util
+from cca_image import readImages, writeImageFiles
+from cca_level import Level, Application
 
 if __name__ == '__main__':
 
@@ -39,21 +39,21 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    mmf_util.debug = args.verbose
+    cca_util.debug = args.verbose
     annotate = args.annotate
     bgColor = int( args.transparent_color, 16 )
     transparencyColor = ( bgColor >> 16, bgColor >> 8 & 0xff, bgColor & 0xff, 255 )
 
     cca = open( args.inFile, 'rb' )
     
-    buf = mmf_util.Buffer( cca.read() )
+    buf = cca_util.Buffer( cca.read() )
 
     tileSize = args.tile_size if args.tile_size else None
     tileConvertSize = args.tile_convert_size if args.tile_convert_size else None
     level = args.level if args.level else None    
     levelTitlesOnly = args.list_levels
     allImages = args.images_all
-    mmf_util.outDir = args.out if args.out and not levelTitlesOnly else None
+    cca_util.outDir = args.out if args.out and not levelTitlesOnly else None
 
     if levelTitlesOnly:
         Application( buf, onlyLevel="nolevelnamewillevermatchthishyperspecificstring" )

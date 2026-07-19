@@ -1,10 +1,11 @@
 import godot_parser
-import mmf_image
-import mmf_util
+import cca_image
+import cca_util
 
 import pdb
+from PIL import Image
 
-class ItemTag( mmf_util.MmfObject ):
+class ItemTag( cca_util.MmfObject ):
 
     def __init__( self, buf ):
         super().__init__( buf )
@@ -47,7 +48,7 @@ class ItemTag( mmf_util.MmfObject ):
             elif self.format in [ 0xa, 0xb, 0x19 ]: # ???
                 pass
             else:
-                mmf_util.trace( f"      item tag {self.name} "
+                cca_util.trace( f"      item tag {self.name} "
                                 f"@0x{self.buf.baseOffset:x} "
                                 f"unknown format {self.format:x}" )
                 return []
@@ -63,7 +64,7 @@ class ItemTag( mmf_util.MmfObject ):
                 ret += ','
             return ret
 
-class Item( mmf_util.MmfObject ):
+class Item( cca_util.MmfObject ):
     ignored = False
 
     def __init__( self, buf, levelName ):
@@ -73,9 +74,9 @@ class Item( mmf_util.MmfObject ):
         class2Len = self.getU( 4 )
         self.class2 = self.read( class2Len ).decode()
         print( f"    Found {self.class2} @0x{self.buf.baseOffset:x}", end="" )
-        mmf_util.trace( "" )
+        cca_util.trace( "" )
         self.tags = {}
-        delimiter = mmf_util._4END + b'[a-zA-Z]{4}'
+        delimiter = cca_util._4END + b'[a-zA-Z]{4}'
         for _ in range( tagCount ):
             tagBuf = self.bite( delimiter, patternIs='start' )[ 2: ]
             tag = ItemTag( tagBuf )
@@ -90,7 +91,7 @@ class Item( mmf_util.MmfObject ):
 
     def getName( self ):
         try:
-            return mmf_util.safeName( self.tags[ 'ItNa' ].contents[ 1 ] )
+            return cca_util.safeName( self.tags[ 'ItNa' ].contents[ 1 ] )
         except Exception as e:
             print( e )
             return "Unnamed"
@@ -136,6 +137,7 @@ class ActiveItem( Item ):
     def __init__( self, buf, levelName, images ):
         super().__init__( buf, levelName )
         self.animations = self.loadAnimations( images )
+        self.spriteSize, self.texture = self.generateSpriteSheet( self.animations )
 
     def loadAnimations( self, images ):
         # Animation format:
@@ -154,49 +156,105 @@ class ActiveItem( Item ):
             animations.append( directions )
             self.go( b'Anix' )
             dirxCount = self.getU( 4 )
-            mmf_util.trace( f"      Anix dirxCount {dirxCount}" )
+            cca_util.trace( f"      Anix dirxCount {dirxCount}" )
             for dirxId in range( dirxCount ):
                 frames = []
                 directions.append( frames )
                 self.go( b'Dirx' )
                 imagCount = self.getU( 4 )
-                mmf_util.trace( f"        Dirx imagCount {imagCount}" )
+                cca_util.trace( f"        Dirx imagCount {imagCount}" )
                 for frameId in range( imagCount ):
                     self.go( b'Imag' )
                     image = images[ self.getU( 4 ) ]
                     image.name = ( f"{self.name}_"
-                        f"{anixId:0{mmf_util.DGTS}}_"
-                        f"{dirxId:0{mmf_util.DGTS}}_"
-                        f"{frameId:0{mmf_util.DGTS}}-0x{image.id:x}" )
+                        f"{anixId:0{cca_util.DGTS}}_"
+                        f"{dirxId:0{cca_util.DGTS}}_"
+                        f"{frameId:0{cca_util.DGTS}}-0x{image.id:x}" )
                     image.levels.add( self.levelName )
                     frames.append( image )
-
-        # I guess technically the hotspot can vary between frames in an animation
-        # if it does you're on your own.
-        self.origin = ( image.hotspotX, image.hotspotY )
         return animations
 
-    def path( self ):
-        return  f'{self.levelName}/{mmf_util.ITEM_DIR}/{self.name}-{self.id}.tscn'
+    def generateSpriteSheet( self, animations ):
+        # Determine size of each tile in the spritesheet
+        # Some sprites may be smaller than others and use the hotspot to compensate
+        minHotspotX = minHotspotY = float( 'inf' )
+        # Maximum of hotspot + image size
+        maxExtentX = maxExtentY = 0
+        maxFrames = 0
+        sequenceCount = 0
+        for anix in animations:
+            for dirx in anix:
+                sequenceCount += 1
+                maxFrames = max( maxFrames, len( dirx ) )
+                for image in dirx:
+                    minHotspotX = min( minHotspotX, image.hotspotX )
+                    minHotspotY = min( minHotspotY, image.hotspotY )
+                    maxExtentX = max( maxExtentX, image.hotspotX + image.width )
+                    maxExtentY = max( maxExtentY, image.hotspotY + image.height )
+        # (x, y) since these are PIL image coordinates, not Godot
+        self.origin = ( minHotspotX, minHotspotY )
+        spriteSize = ( maxExtentX - minHotspotX, maxExtentY - minHotspotY )
+        texSize = ( spriteSize[ 0 ] * maxFrames, spriteSize[ 1 ] * sequenceCount )
+        if ( texSize[ 0 ] > cca_util.IMAGE_WARN_SIZE or
+             texSize[ 1 ] > cca_util.IMAGE_WARN_SIZE ):
+            printf( f'***WARNING***: item {self.name} spritesheet size {texSize} > '
+                    f'{cca_util.IMAGE_WARN_SIZE}' )
+        
+        texture = Image.new( "RGBA", texSize, color=( 0, 0, 0, 0 ) )
+
+        sequenceId = 0
+        for anix in animations:
+            for dirx in anix:
+                for frameId, frame in enumerate( dirx ):
+                    tilePos = ( frameId * spriteSize[ 0 ],
+                                sequenceId * spriteSize[ 1 ] )
+                    offset = ( frame.hotspotX - self.origin[ 0 ],
+                               frame.hotspotY - self.origin[ 1 ] )
+                    dst = ( tilePos[ 0 ] + offset[ 0 ], tilePos[ 1 ] + offset[ 1 ] )
+                    texture.paste( frame.result, dst )
+                sequenceId += 1
+        return spriteSize, texture
+                    
+    def texturePath( self ):
+        return f'{self.levelName}/{cca_util.IMAGE_SUBDIR}/{self.name}.png'        
     
+    def path( self ):
+        return  f'{self.levelName}/{cca_util.ITEM_DIR}/{self.name}-{self.id}.tscn'
+
+    def writeTexture( self ):
+        self.texture.save( cca_util.filePath( self.texturePath() ) )        
+        
     def writeActiveItem( self, annotate ):
         # ActiveItems can have lots of animation frames, so give them their own scene
         gdItemScene = godot_parser.GDScene()
         gdAnimations = []
-        
-        for mmfAnimId, mmfAnimation in enumerate( self.animations ):
-            for mmfDirId, mmfDirection in enumerate( mmfAnimation ):
+
+        textureResource = gdItemScene.add_ext_resource(
+            cca_util.resourcePath( self.texturePath() ), 'Texture' )
+
+        sequence = 0
+        for ccaAnimId, ccaAnimation in enumerate( self.animations ):
+            for ccaDirId, ccaDirection in enumerate( ccaAnimation ):
                 frameRefs = []
-                for image in mmfDirection:
-                    frameResource = image.addImageResource( gdItemScene )
-                    frameRefs.append( frameResource.reference )
+                for frameId, _ in enumerate( ccaDirection ):
+                    frame = gdItemScene.add_sub_resource( "AtlasTexture" )
+                    frame[ 'flags' ] = 4 # magic number???
+                    frame[ 'atlas' ] = textureResource.reference
+                    frame[ 'region' ] = godot_parser.GDObject(
+                        "Rect2",
+                        frameId * self.spriteSize[ 0 ],
+                        sequence * self.spriteSize[ 1 ],
+                        self.spriteSize[ 0 ],
+                        self.spriteSize[ 1 ] )
+                    frameRefs.append( frame.reference )
                 gdAnimations.append( {
                     'loop': True,
-                    'name': ( f'anix{mmfAnimId:0{mmf_util.DGTS}}_'
-                              f'{mmfDirId:0{mmf_util.DGTS}}' ),
+                    'name': ( f'anix{ccaAnimId:0{cca_util.DGTS}}_'
+                              f'{ccaDirId:0{cca_util.DGTS}}' ),
                     'speed': 5.0,
                     'frames': frameRefs,
                 } )
+                sequence += 1
                 
         gdFrames = gdItemScene.add_sub_resource( "SpriteFrames" )
         gdFrames[ "animations" ] = gdAnimations
@@ -231,13 +289,13 @@ class ActiveItem( Item ):
                         for image in dirx:
                             image.doAnnotate( node )
             itemTree.root.add_child( node )
-        gdItemScene.write( mmf_util.filePath( self.path() ) )
+        gdItemScene.write( cca_util.filePath( self.path() ) )
 
     def addItemResource( self, levelScene ):
         self.gdResource = levelScene.add_ext_resource(
-            mmf_util.resourcePath( self.path() ), 'PackedScene' )
+            cca_util.resourcePath( self.path() ), 'PackedScene' )
     
-class Instance( mmf_util.MmfObject ):
+class Instance( cca_util.MmfObject ):
 
     def __init__( self, buf, items ):
         super().__init__( buf )
@@ -249,9 +307,9 @@ class Instance( mmf_util.MmfObject ):
         self.unknown2 = self.getU( 4 )
         self.item = items.get( self.getU( 4 ), None )
         if type( self.item ) == BackdropItem:
-            self.zIndex = mmf_util.BACKDROP_Z_INDEX
+            self.zIndex = cca_util.BACKDROP_Z_INDEX
         else:
-            self.zIndex = mmf_util.ACTIVE_Z_INDEX
+            self.zIndex = cca_util.ACTIVE_Z_INDEX
         # Also observed last element as e.g. 0
         # assert self.getU( 4 ) == 0xFFFFFFFF
 

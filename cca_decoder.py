@@ -32,9 +32,6 @@ if __name__ == '__main__':
     parser.add_argument( "-ll", "--list-levels",
                          help="List levels in the application and exit.",
                          action='store_true' )
-    parser.add_argument( "-i", "--images-all",
-                         action='store_true',
-                         help="Include all images" )
     parser.add_argument( "-o", "--out", help="output directory" )    
 
     args = parser.parse_args()
@@ -52,7 +49,6 @@ if __name__ == '__main__':
     tileConvertSize = args.tile_convert_size if args.tile_convert_size else None
     level = args.level if args.level else None    
     levelTitlesOnly = args.list_levels
-    allImages = args.images_all
     cca_util.outDir = args.out if args.out and not levelTitlesOnly else None
 
     if levelTitlesOnly:

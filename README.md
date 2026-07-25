@@ -58,6 +58,10 @@ Thanks to Smidge from here: https://forums.sonicretro.org/threads/cca-and-gam-fi
 for documenting his own efforts to reverse-engineer the format, way back in 2011. It was a huge help!
 (The original document is available on archive.org.)
 
+**AI Content**
+
+This repository contains no AI-written code. *All mistakes are my own.*
+
 **License**
 
 Released under the MIT license.

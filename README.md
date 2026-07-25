@@ -35,8 +35,10 @@ Requires https://github.com/stevearc/godot_parser.
    overwrites the script files with its own files.
 6. If you are using tilesets (`-t` option) and you wish to develop using Godot 4.x, you will run into this bug:
    https://github.com/godotengine/godot/issues/106563. To fix it:
+
    a. Open the project with Godot 4.2 first. Fix any broken dependencies. (If a scene's name is also a class name,
       Godot likes to rename it.)
+
    b. If your tiles are not 16x16 they may be invisible or jumbled. To fix it, select your tile**map** in each
       level. In the inspector pane, select the tile**set** and adjust the tile size.
       
